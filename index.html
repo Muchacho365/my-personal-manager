@@ -1632,32 +1632,6 @@
                 );
             };
 
-            window.addNote = () => {
-                const title = document.getElementById("noteTitle").value;
-                const content = document.getElementById("noteContent").value;
-                if (!title && !content) return;
-                state.notes.unshift({
-                    id: uuid(),
-                    title,
-                    content,
-                    color: state.noteColor || "#fbbf24",
-                    category: document.getElementById("noteCategory").value,
-                    pinned: false,
-                    date: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                });
-                save("notes");
-                render();
-            };
-
-            window.togglePin = (id) => {
-                const note = state.notes.find((n) => n.id === id);
-                note.pinned = !note.pinned;
-                note.updatedAt = new Date().toISOString();
-                save("notes");
-                render();
-            };
-
             window.confirmDeleteNote = (id) => {
                 showConfirm(
                     "Are you sure you want to delete this note?",
@@ -1690,6 +1664,7 @@
                 // Bring to front
                 state.notes = state.notes.filter((n) => n.id !== id);
                 state.notes.push(note);
+                save("notes"); // Save order change
                 render();
             };
 
@@ -1757,7 +1732,7 @@
                 const modals = document.getElementById("modals");
                 modals.innerHTML = `
                           <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
-                              <div class="modal" style="max-width: 500px;">
+                              <div class="modal full-screen-modal" style="max-width: 90%; height: 90%; display: flex; flex-direction: column;">
                                   <div class="modal-header">
                                       <h2>✏️ Edit Note</h2>
                                       <button class="btn-icon" onclick="closeModal()">✕</button>
@@ -1765,10 +1740,10 @@
                                   <div class="form-group">
                                       <input id="editNoteTitle" value="${
                                           n.title || ""
-                                      }" placeholder="Title">
+                                      }" placeholder="Title" style="font-size: 1.5rem; font-weight: bold;">
                                   </div>
-                                  <div class="form-group">
-                                      <textarea id="editNoteContent" rows="4" placeholder="Content...">${
+                                  <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
+                                      <textarea id="editNoteContent" style="flex: 1; resize: none; font-family: monospace; font-size: 1.1rem;" placeholder="Content...">${
                                           n.content || ""
                                       }</textarea>
                                   </div>
@@ -1895,7 +1870,7 @@
                         2,
                         "0"
                     )}-${String(day).padStart(2, "0")}`;
-                    const hasTask = state.todos.some(
+                    const dayTasks = state.todos.filter(
                         (t) => t.dueDate === dateStr && !t.done
                     );
                     const isToday =
@@ -1903,12 +1878,29 @@
                         new Date(year, month, day).toDateString();
 
                     calendarHtml += `
-                        <div class="calendar-day ${hasTask ? "has-task" : ""} ${
-                        isToday ? "today" : ""
-                    }" 
-                             onclick="filterTodosByDate('${dateStr}')">
-                            ${day}
-                            ${hasTask ? '<div class="task-dot"></div>' : ""}
+                        <div class="calendar-day ${
+                            dayTasks.length > 0 ? "has-task" : ""
+                        } ${isToday ? "today" : ""}" 
+                             onclick="openDayView('${dateStr}')">
+                            <span class="day-number">${day}</span>
+                            ${
+                                dayTasks.length > 0
+                                    ? `<div class="task-dots">
+                                        ${dayTasks
+                                            .slice(0, 3)
+                                            .map(
+                                                () =>
+                                                    '<div class="task-dot"></div>'
+                                            )
+                                            .join("")}
+                                        ${
+                                            dayTasks.length > 3
+                                                ? '<span class="more-dots">+</span>'
+                                                : ""
+                                        }
+                                       </div>`
+                                    : ""
+                            }
                         </div>
                     `;
                 }
@@ -1933,9 +1925,80 @@
                 render();
             };
 
-            window.filterTodosByDate = (dateStr) => {
-                state.search = dateStr;
-                render();
+            window.openDayView = (dateStr) => {
+                const tasks = state.todos.filter((t) => t.dueDate === dateStr);
+                const dateObj = new Date(dateStr);
+                const dateDisplay = dateObj.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                });
+
+                const modals = document.getElementById("modals");
+                modals.innerHTML = `
+                    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                        <div class="modal" style="max-width: 500px;">
+                            <div class="modal-header">
+                                <h2>📅 ${dateDisplay}</h2>
+                                <button class="btn-icon" onclick="closeModal()">✕</button>
+                            </div>
+                            
+                            <div class="day-tasks-list" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                                ${
+                                    tasks.length === 0
+                                        ? '<p style="color: var(--text-muted); text-align: center;">No tasks for this day.</p>'
+                                        : ""
+                                }
+                                ${tasks
+                                    .map(
+                                        (t) => `
+                                    <div class="todo-item card" style="margin-bottom: 8px; padding: 10px;">
+                                        <div class="todo-checkbox ${
+                                            t.done ? "checked" : ""
+                                        }" onclick="toggleTodo('${
+                                            t.id
+                                        }'); openDayView('${dateStr}')"></div>
+                                        <div class="todo-content">
+                                            <div class="todo-text ${
+                                                t.done ? "done" : ""
+                                            }">${t.text}</div>
+                                        </div>
+                                    </div>
+                                `
+                                    )
+                                    .join("")}
+                            </div>
+
+                            <div class="form-group">
+                                <h3>Add Task</h3>
+                                <input id="dayTaskInput" placeholder="New task for this day..." onkeypress="if(event.key==='Enter') addDayTask('${dateStr}')">
+                            </div>
+                            <button class="btn btn-primary" style="width: 100%;" onclick="addDayTask('${dateStr}')">➕ Add Task</button>
+                        </div>
+                    </div>
+                `;
+                setTimeout(
+                    () => document.getElementById("dayTaskInput").focus(),
+                    100
+                );
+            };
+
+            window.addDayTask = (dateStr) => {
+                const input = document.getElementById("dayTaskInput");
+                const text = input.value.trim();
+                if (!text) return;
+
+                state.todos.unshift({
+                    id: uuid(),
+                    text,
+                    done: false,
+                    priority: "medium",
+                    dueDate: dateStr,
+                    updatedAt: new Date().toISOString(),
+                });
+                save();
+                openDayView(dateStr); // Refresh modal
+                render(); // Refresh background
             };
         </script>
     </body>

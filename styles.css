@@ -724,12 +724,22 @@ textarea {
     flex-direction: column;
     user-select: none;
     box-shadow: var(--shadow-sm);
+    overflow: hidden; /* Prevent spillover */
+}
+
+.note-content {
+    flex: 1;
+    overflow-y: auto; /* Scroll if too long */
+    margin-top: 8px;
+    margin-bottom: 8px;
+    white-space: pre-wrap; /* Preserve formatting */
+    word-break: break-word; /* Prevent horizontal overflow */
 }
 
 .note-card.dragging {
     opacity: 0.9;
     box-shadow: var(--shadow-lg);
-    z-index: 100;
+    z-index: 1000 !important; /* Ensure on top while dragging */
     cursor: grabbing;
 }
 
@@ -1233,6 +1243,11 @@ textarea {
     transition: all 0.15s;
     position: relative;
     font-size: 0.9rem;
+    min-height: 60px; /* Taller for dots */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
 }
 
 .calendar-day:hover {
@@ -1243,19 +1258,30 @@ textarea {
     background: var(--accent-soft);
     color: var(--accent);
     font-weight: bold;
+    border: 1px solid var(--accent);
 }
 
 .calendar-day.has-task {
-    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.task-dots {
+    display: flex;
+    gap: 2px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .task-dot {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
     background: var(--warning);
     border-radius: 50%;
-    position: absolute;
-    bottom: 4px;
-    left: 50%;
-    transform: translateX(-50%);
+}
+
+.more-dots {
+    font-size: 10px;
+    line-height: 6px;
+    color: var(--text-muted);
 }
