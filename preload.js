@@ -21,4 +21,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Listen for tab changes from tray
     onChangeTab: (callback) =>
         ipcRenderer.on("change-tab", (event, tab) => callback(tab)),
+
+    // Data Persistence
+    loadData: () => ipcRenderer.invoke("load-data"),
+    saveData: (data) => ipcRenderer.invoke("save-data", data),
 });

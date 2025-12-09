@@ -699,24 +699,59 @@ textarea {
     justify-content: center;
 }
 
-/* ===== Notes Grid ===== */
-.notes-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 16px;
+/* ===== Notes Canvas ===== */
+.notes-canvas {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 200px);
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 20px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: auto;
+    background-color: var(--bg-secondary);
 }
 
 .note-card {
+    position: absolute;
     border-radius: var(--radius-lg);
     padding: 16px;
-    position: relative;
-    transition: all 0.15s;
+    transition: box-shadow 0.15s, transform 0.1s;
     border: 1px solid transparent;
+    min-width: 200px;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+    box-shadow: var(--shadow-sm);
+}
+
+.note-card.dragging {
+    opacity: 0.9;
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    cursor: grabbing;
 }
 
 .note-card:hover {
-    transform: translateY(-2px);
     box-shadow: var(--shadow-md);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, var(--text-muted) 50%);
+    opacity: 0.5;
+    border-bottom-right-radius: var(--radius-lg);
+}
+
+.resize-handle:hover {
+    opacity: 1;
 }
 
 .note-card.pinned {
@@ -1163,4 +1198,64 @@ textarea {
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+}
+
+/* ===== Calendar ===== */
+.calendar-card {
+    margin-bottom: 24px;
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    text-align: center;
+}
+
+.weekday {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.calendar-day {
+    padding: 8px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    font-size: 0.9rem;
+}
+
+.calendar-day:hover {
+    background: var(--bg-hover);
+}
+
+.calendar-day.today {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: bold;
+}
+
+.calendar-day.has-task {
+    border: 1px solid var(--border);
+}
+
+.task-dot {
+    width: 4px;
+    height: 4px;
+    background: var(--warning);
+    border-radius: 50%;
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
 }

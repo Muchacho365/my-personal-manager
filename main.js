@@ -7,10 +7,12 @@ const {
     globalShortcut,
 } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const CryptoJS = require("crypto-js");
 
 let mainWindow;
 const ENCRYPTION_KEY = "PersonalManager2024SecureKey";
+const DATA_FILE = path.join(app.getPath("userData"), "data.json");
 
 function createWindow() {
     // Remove default menu bar
@@ -135,4 +137,27 @@ ipcMain.handle("generate-password", (event, options) => {
         password += chars[array[i] % chars.length];
     }
     return password;
+});
+
+ipcMain.handle("load-data", () => {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const data = fs.readFileSync(DATA_FILE, "utf8");
+            return JSON.parse(data);
+        }
+        return null;
+    } catch (error) {
+        console.error("Failed to load data:", error);
+        return null;
+    }
+});
+
+ipcMain.handle("save-data", (event, data) => {
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+        return true;
+    } catch (error) {
+        console.error("Failed to save data:", error);
+        return false;
+    }
 });
