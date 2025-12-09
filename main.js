@@ -34,6 +34,7 @@ function createWindow() {
     });
 
     mainWindow.loadFile("index.html");
+    mainWindow.maximize();
 
     // Normal close behavior - actually close the app
     mainWindow.on("closed", () => {
