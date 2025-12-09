@@ -1,0 +1,53 @@
+{
+    "name": "muchacho-personal-manager",
+    "version": "1.0.0",
+    "description": "Muchacho Personal Manager - Todo, Passwords, Videos, Books, Notes",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "dev": "electron .",
+        "build": "electron-builder --win",
+        "build:portable": "electron-builder --win portable"
+    },
+    "author": "Muchacho",
+    "license": "MIT",
+    "devDependencies": {
+        "electron": "^28.0.0",
+        "electron-builder": "^24.9.1"
+    },
+    "dependencies": {
+        "crypto-js": "^4.2.0"
+    },
+    "build": {
+        "appId": "com.muchacho.personal-manager",
+        "productName": "Muchacho Personal Manager",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "index.html",
+            "styles.css",
+            "assets/**/*",
+            "!node_modules/**/*.md",
+            "!node_modules/**/*.txt",
+            "!node_modules/**/test/**",
+            "!node_modules/**/docs/**"
+        ],
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "icon": "assets/icon.ico",
+            "signAndEditExecutable": false
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true
+        }
+    }
+}

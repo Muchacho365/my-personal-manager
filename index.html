@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com"
+        />
+        <title>Muchacho's Personal Manager</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="styles.css" />
+    </head>
+    <body>
+        <div class="app-container" id="app"></div>
+
+        <!-- Modals Container -->
+        <div id="modals"></div>
+
+        <script>
+            // Generate UUID
+            const uuid = () => {
+                return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+                    /[xy]/g,
+                    (c) => {
+                        const r = (Math.random() * 16) | 0;
+                        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+                    }
+                );
+            };
+
+            // State
+            let state = {
+                tab: "todos",
+                search: "",
+                todos: JSON.parse(localStorage.getItem("todos") || "[]"),
+                passwords: JSON.parse(
+                    localStorage.getItem("passwords") || "[]"
+                ),
+                videos: JSON.parse(localStorage.getItem("videos") || "[]"),
+                books: JSON.parse(localStorage.getItem("books") || "[]"),
+                notes: JSON.parse(localStorage.getItem("notes") || "[]"),
+                editing: {},
+                showPwd: {},
+                showDone: false,
+                saveStatus: "saved",
+                newTodoPriority: "medium",
+                noteColor: "#fbbf24",
+                syncStatus: "idle",
+                theme: localStorage.getItem("theme") || "dark",
+            };
+
+            // Apply theme on load
+            document.body.setAttribute("data-theme", state.theme);
+
+            // Migrate old items to use UUIDs
+            const migrateToUUID = (items) => {
+                return items.map((item) => ({
+                    ...item,
+                    id: typeof item.id === "number" ? uuid() : item.id,
+                    updatedAt: item.updatedAt || new Date().toISOString(),
+                }));
+            };
+
+            // Apply migration
+            ["todos", "passwords", "videos", "books", "notes"].forEach(
+                (key) => {
+                    state[key] = migrateToUUID(state[key]);
+                    localStorage.setItem(key, JSON.stringify(state[key]));
+                }
+            );
+
+            // Save with auto-save indicator
+            const save = (key) => {
+                state.saveStatus = "saving";
+                renderWithoutSearch();
+                localStorage.setItem(key, JSON.stringify(state[key]));
+                setTimeout(() => {
+                    state.saveStatus = "saved";
+                    renderWithoutSearch();
+                }, 500);
+            };
+
+            // Debounce helper for search
+            let searchTimeout = null;
+            const debounceSearch = (value) => {
+                clearTimeout(searchTimeout);
+                // Update state.search immediately for the input value binding
+                state.search = value;
+                searchTimeout = setTimeout(async () => {
+                    // Get cursor position before render
+                    const searchInput = document.querySelector(".search-input");
+                    const cursorPos = searchInput
+                        ? searchInput.selectionStart
+                        : value.length;
+
+                    await render();
+
+                    // Restore focus and cursor position after render
+                    const newSearchInput =
+                        document.querySelector(".search-input");
+                    if (newSearchInput) {
+                        newSearchInput.focus();
+                        newSearchInput.setSelectionRange(cursorPos, cursorPos);
+                    }
+                }, 300);
+            };
+
+            // Render without resetting search input focus
+            const renderWithoutSearch = () => {
+                const activeEl = document.activeElement;
+                const isSearchFocused =
+                    activeEl && activeEl.classList.contains("search-input");
+                render();
+                if (isSearchFocused) {
+                    const searchInput = document.querySelector(".search-input");
+                    if (searchInput) {
+                        searchInput.focus();
+                        searchInput.selectionStart = searchInput.selectionEnd =
+                            searchInput.value.length;
+                    }
+                }
+            };
+
+            // Encryption helpers (using Electron API)
+            const encrypt = async (text) => {
+                if (window.electronAPI) {
+                    return await electronAPI.encrypt(text);
+                }
+                return btoa(text);
+            };
+
+            const decrypt = async (text) => {
+                if (window.electronAPI) {
+                    return await electronAPI.decrypt(text);
+                }
+                try {
+                    return atob(text);
+                } catch {
+                    return text;
+                }
+            };
+
+            // Copy to clipboard
+            const copyToClipboard = async (text) => {
+                if (window.electronAPI) {
+                    await electronAPI.copyToClipboard(text);
+                } else {
+                    await navigator.clipboard.writeText(text);
+                }
+                showToast("Copied to clipboard!");
+            };
+
+            // Toast notification
+            const showToast = (message) => {
+                const toast = document.createElement("div");
+                toast.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        z-index: 3000;
+        animation: fadeInUp 0.3s ease-out;
+      `;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 2000);
+            };
+
+            // Confirm dialog
+            const showConfirm = (message, onConfirm) => {
+                const modals = document.getElementById("modals");
+                modals.innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+          <div class="modal confirm-dialog">
+            <h2>⚠️ Confirm</h2>
+            <p>${message}</p>
+            <div class="confirm-actions">
+              <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+              <button class="btn btn-danger" onclick="confirmAction()">Delete</button>
+            </div>
+          </div>
+        </div>
+      `;
+                window.confirmAction = () => {
+                    closeModal();
+                    onConfirm();
+                };
+            };
+
+            const closeModal = () => {
+                document.getElementById("modals").innerHTML = "";
+            };
+
+            // Password Generator Modal
+            const showPasswordGenerator = () => {
+                const modals = document.getElementById("modals");
+                modals.innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <h2>🔐 Password Generator</h2>
+              <button class="btn-icon" onclick="closeModal()">✕</button>
+            </div>
+            <div class="password-preview" id="generatedPassword">Click Generate</div>
+            <div class="length-slider">
+              <label>Length: <span id="lengthValue">16</span></label>
+              <input type="range" min="8" max="64" value="16" oninput="document.getElementById('lengthValue').textContent=this.value">
+            </div>
+            <div class="generator-options">
+              <label><input type="checkbox" id="genUppercase" checked> Uppercase (A-Z)</label>
+              <label><input type="checkbox" id="genLowercase" checked> Lowercase (a-z)</label>
+              <label><input type="checkbox" id="genNumbers" checked> Numbers (0-9)</label>
+              <label><input type="checkbox" id="genSymbols" checked> Symbols (!@#$...)</label>
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+              <button class="btn btn-secondary" style="flex:1" onclick="generatePassword()">🔄 Generate</button>
+              <button class="btn btn-primary" style="flex:1" onclick="useGeneratedPassword()">✓ Use This</button>
+            </div>
+          </div>
+        </div>
+      `;
+                generatePassword();
+            };
+
+            const generatePassword = async () => {
+                const length = parseInt(
+                    document.querySelector(".length-slider input").value
+                );
+                const options = {
+                    length,
+                    uppercase: document.getElementById("genUppercase").checked,
+                    lowercase: document.getElementById("genLowercase").checked,
+                    numbers: document.getElementById("genNumbers").checked,
+                    symbols: document.getElementById("genSymbols").checked,
+                };
+
+                let password;
+                if (window.electronAPI) {
+                    password = await electronAPI.generatePassword(options);
+                } else {
+                    let chars = "";
+                    if (options.uppercase)
+                        chars += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                    if (options.lowercase)
+                        chars += "abcdefghijklmnopqrstuvwxyz";
+                    if (options.numbers) chars += "0123456789";
+                    if (options.symbols) chars += "!@#$%^&*()_+-=[]{}|;:,.<>?";
+                    if (!chars) chars = "abcdefghijklmnopqrstuvwxyz";
+                    password = Array.from(
+                        { length },
+                        () => chars[Math.floor(Math.random() * chars.length)]
+                    ).join("");
+                }
+
+                document.getElementById("generatedPassword").textContent =
+                    password;
+            };
+
+            const useGeneratedPassword = () => {
+                const password =
+                    document.getElementById("generatedPassword").textContent;
+                const pwdInput = document.getElementById("pwdPass");
+                if (pwdInput) pwdInput.value = password;
+                closeModal();
+            };
+
+            // Filter helper
+            const filtered = (items, fields) => {
+                if (!state.search) return items;
+                const q = state.search.toLowerCase();
+                return items.filter((i) =>
+                    fields.some((f) => i[f]?.toLowerCase().includes(q))
+                );
+            };
+
+            // Date formatting
+            const formatDate = (dateStr) => {
+                if (!dateStr) return "";
+                const date = new Date(dateStr);
+                return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                });
+            };
+
+            const formatDateTime = (dateStr) => {
+                if (!dateStr) return "";
+                const date = new Date(dateStr);
+                return (
+                    date.toLocaleDateString("en-US", {
+                        day: "numeric",
+                        month: "short",
+                    }) +
+                    ", " +
+                    date.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                    })
+                );
+            };
+
+            const isOverdue = (dateStr) => {
+                if (!dateStr) return false;
+                return (
+                    new Date(dateStr) <
+                    new Date(new Date().setHours(0, 0, 0, 0))
+                );
+            };
+
+            // Drag and Drop
+            let draggedItem = null;
+
+            const handleDragStart = (e, id) => {
+                draggedItem = id;
+                e.target.classList.add("dragging");
+            };
+
+            const handleDragEnd = (e) => {
+                e.target.classList.remove("dragging");
+                document
+                    .querySelectorAll(".card")
+                    .forEach((c) => c.classList.remove("drag-over"));
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add("drag-over");
+            };
+
+            const handleDragLeave = (e) => {
+                e.currentTarget.classList.remove("drag-over");
+            };
+
+            const handleDrop = (e, targetId) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove("drag-over");
+
+                if (draggedItem && draggedItem !== targetId) {
+                    const items = state.todos;
+                    const dragIdx = items.findIndex(
+                        (i) => i.id === draggedItem
+                    );
+                    const targetIdx = items.findIndex((i) => i.id === targetId);
+
+                    const [removed] = items.splice(dragIdx, 1);
+                    items.splice(targetIdx, 0, removed);
+
+                    save("todos");
+                    render();
+                }
+                draggedItem = null;
+            };
+
+            // Main Render
+            const render = async () => {
+                const app = document.getElementById("app");
+
+                app.innerHTML = `
+        <!-- Header -->
+        <header class="header">
+          <h1>Muchacho Personal Manager</h1>
+          <p>Todo • Passwords • Videos • Books • Notes</p>
+        </header>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          ${["todos", "passwords", "videos", "books", "notes"]
+              .map(
+                  (t) => `
+            <button class="tab-btn ${
+                state.tab === t ? "active" : ""
+            }" onclick="changeTab('${t}')">
+              <span>${
+                  {
+                      todos: "📝",
+                      passwords: "🔐",
+                      videos: "🎬",
+                      books: "📚",
+                      notes: "📒",
+                  }[t]
+              } ${t.charAt(0).toUpperCase() + t.slice(1)}</span>
+            </button>
+          `
+              )
+              .join("")}
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <div class="search-box">
+            <input type="text" class="search-input" placeholder="Search..." value="${
+                state.search
+            }" 
+                   oninput="debounceSearch(this.value)"
+                   ${state.search ? "autofocus" : ""}>
+            ${
+                state.search
+                    ? `<button class="clear-search" onclick="state.search=''; render()">✕</button>`
+                    : ""
+            }
+          </div>
+          <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+            ${state.theme === "dark" ? "☀️" : "🌙"}
+          </button>
+          <button class="sync-btn ${
+              state.syncStatus === "syncing" ? "syncing" : ""
+          }" onclick="handleSync()">
+            <span class="sync-icon">☁️</span> Sync
+          </button>
+          <div class="save-indicator ${state.saveStatus}">
+            ${state.saveStatus === "saving" ? "💾 Saving..." : "✓ Saved"}
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+          ${await renderContent()}
+        </div>
+      `;
+
+                // Setup keyboard shortcuts
+                setupKeyboardShortcuts();
+            };
+
+            const renderContent = async () => {
+                switch (state.tab) {
+                    case "todos":
+                        return renderTodos();
+                    case "passwords":
+                        return await renderPasswords();
+                    case "videos":
+                        return renderVideos();
+                    case "books":
+                        return renderBooks();
+                    case "notes":
+                        return renderNotes();
+                    default:
+                        return "";
+                }
+            };
+
+            // Render Todos
+            const renderTodos = () => {
+                const todos = filtered(
+                    state.todos.filter((t) => state.showDone || !t.done),
+                    ["text"]
+                );
+                const doneCount = state.todos.filter((t) => t.done).length;
+                const isSearching = state.search.length > 0;
+
+                return `
+        ${
+            !isSearching
+                ? `
+        <div class="card form-card">
+          <div class="form-group">
+            <input id="newTodo" placeholder="What needs to be done?" onkeypress="if(event.key==='Enter')addTodo()">
+          </div>
+          <div class="form-row cols-2">
+            <div>
+              <input id="todoDueDate" type="date" style="color-scheme: dark;">
+            </div>
+            <div class="priority-selector">
+              <button class="priority-option high ${
+                  state.newTodoPriority === "high" ? "selected" : ""
+              }" onclick="state.newTodoPriority='high'; render()">High</button>
+              <button class="priority-option medium ${
+                  state.newTodoPriority === "medium" ? "selected" : ""
+              }" onclick="state.newTodoPriority='medium'; render()">Med</button>
+              <button class="priority-option low ${
+                  state.newTodoPriority === "low" ? "selected" : ""
+              }" onclick="state.newTodoPriority='low'; render()">Low</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="addTodo()">➕ Add Todo</button>
+        </div>
+        `
+                : `<p class="search-results-info">🔍 Found ${
+                      todos.length
+                  } result${todos.length !== 1 ? "s" : ""}</p>`
+        }
+        
+        <button class="btn ${
+            state.showDone ? "btn-primary" : "btn-secondary"
+        } show-done-btn" onclick="state.showDone=!state.showDone; render()">
+          ${state.showDone ? "👁️ Hide" : "👁️ Show"} Done (${doneCount})
+        </button>
+        
+        <div class="todos-list">
+          ${todos
+              .map(
+                  (t) => `
+            <div class="card todo-item" 
+                 draggable="true" 
+                 ondragstart="handleDragStart(event, '${t.id}')"
+                 ondragend="handleDragEnd(event)"
+                 ondragover="handleDragOver(event)"
+                 ondragleave="handleDragLeave(event)"
+                 ondrop="handleDrop(event, '${t.id}')">
+              <div class="todo-checkbox ${
+                  t.done ? "checked" : ""
+              }" onclick="toggleTodo('${t.id}')"></div>
+              <div class="todo-content">
+                ${
+                    state.editing[t.id]
+                        ? `
+                  <input value="${t.text}" id="edit-${t.id}" onkeypress="if(event.key==='Enter')saveEdit('${t.id}')" style="margin-bottom: 8px;">
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary" onclick="saveEdit('${t.id}')">Save</button>
+                    <button class="btn btn-secondary" onclick="delete state.editing['${t.id}']; render()">Cancel</button>
+                  </div>
+                `
+                        : `
+                  <div class="todo-text ${t.done ? "done" : ""}">${t.text}</div>
+                  <div class="todo-meta">
+                    ${
+                        t.priority
+                            ? `<span class="todo-badge priority-${
+                                  t.priority
+                              }">${t.priority.toUpperCase()}</span>`
+                            : ""
+                    }
+                    ${
+                        t.dueDate
+                            ? `<span class="todo-badge ${
+                                  isOverdue(t.dueDate) && !t.done
+                                      ? "overdue"
+                                      : "due-date"
+                              }">📅 ${formatDate(t.dueDate)}</span>`
+                            : ""
+                    }
+                  </div>
+                `
+                }
+              </div>
+              <div class="todo-actions">
+                <button class="btn-icon" onclick="state.editing['${
+                    t.id
+                }']=true; render()" title="Edit">✏️</button>
+                <button class="btn-icon danger" onclick="confirmDeleteTodo('${
+                    t.id
+                }')" title="Delete">🗑️</button>
+              </div>
+            </div>
+          `
+              )
+              .join("")}
+        </div>
+      `;
+            };
+
+            // Render Passwords
+            const renderPasswords = async () => {
+                const passwords = filtered(state.passwords, ["title", "user"]);
+                const isSearching = state.search.length > 0;
+
+                let passwordCards = "";
+                for (const p of passwords) {
+                    const decryptedPass = state.showPwd[p.id]
+                        ? await decrypt(p.pass)
+                        : "••••••••••";
+
+                    let questionsHtml = "";
+                    if (p.qs?.some((q) => q.q)) {
+                        questionsHtml = `<div class="security-questions">`;
+                        for (let i = 0; i < p.qs.length; i++) {
+                            const q = p.qs[i];
+                            if (q.q) {
+                                const decryptedAns = q.a
+                                    ? await decrypt(q.a)
+                                    : "";
+                                questionsHtml += `
+                <div class="security-question">
+                  <div class="question">Q${i + 1}: ${q.q}</div>
+                  <div class="answer">A: ${decryptedAns}</div>
+                </div>
+              `;
+                            }
+                        }
+                        questionsHtml += `</div>`;
+                    }
+
+                    passwordCards += `
+          <div class="card password-card">
+            <div class="password-header">
+              <div>
+                <h3>${p.title}</h3>
+                ${
+                    p.user
+                        ? `<p style="color: var(--text-muted); font-size: 0.9rem;">👤 ${p.user}</p>`
+                        : ""
+                }
+              </div>
+              <div style="display: flex; gap: 4px;">
+                <button class="btn-icon" onclick="editPassword('${
+                    p.id
+                }')" title="Edit">✏️</button>
+                <button class="btn-icon danger" onclick="confirmDeletePassword('${
+                    p.id
+                }')" title="Delete">🗑️</button>
+              </div>
+            </div>
+            <div class="password-field">
+              <span class="password-value">${decryptedPass}</span>
+              <button class="btn-icon" onclick="state.showPwd['${
+                  p.id
+              }']=!state.showPwd['${p.id}']; render()" title="Show/Hide">
+                ${state.showPwd[p.id] ? "👁️" : "👁️‍🗨️"}
+              </button>
+              <button class="btn-icon" onclick="copyPassword('${
+                  p.id
+              }')" title="Copy">📋</button>
+            </div>
+            ${questionsHtml}
+            ${
+                p.notes
+                    ? `<p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 12px;">📝 ${p.notes}</p>`
+                    : ""
+            }
+          </div>
+        `;
+                }
+
+                return `
+        ${
+            !isSearching
+                ? `
+        <div class="card form-card">
+          <h2>🔐 Add Password</h2>
+          <div class="form-group">
+            <input id="pwdTitle" placeholder="Title *">
+          </div>
+          <div class="form-group">
+            <input id="pwdUser" placeholder="Username">
+          </div>
+          <div class="form-row cols-2" style="align-items: flex-end;">
+            <input id="pwdPass" type="password" placeholder="Password *">
+            <button class="btn btn-secondary" onclick="showPasswordGenerator()">🎲 Generate</button>
+          </div>
+          <h3 style="margin: 16px 0 8px; font-size: 0.95rem;">Security Questions</h3>
+          ${[0, 1, 2]
+              .map(
+                  (i) => `
+            <div class="form-row cols-2">
+              <input id="q${i}" placeholder="Question ${i + 1}">
+              <input id="a${i}" placeholder="Answer ${i + 1}">
+            </div>
+          `
+              )
+              .join("")}
+          <div class="form-group">
+            <textarea id="pwdNotes" placeholder="Notes" rows="2"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="addPassword()">💾 Save Password</button>
+        </div>
+        `
+                : `<p class="search-results-info">🔍 Found ${
+                      passwords.length
+                  } result${passwords.length !== 1 ? "s" : ""}</p>`
+        }
+        
+        ${passwordCards}
+      `;
+            };
+
+            // Render Videos
+            const renderVideos = () => {
+                const videos = filtered(state.videos, ["title"]);
+                const isSearching = state.search.length > 0;
+
+                return `
+        ${
+            !isSearching
+                ? `
+        <div class="card form-card">
+          <h2>🎬 Add Video</h2>
+          <div class="form-group">
+            <input id="vidTitle" placeholder="Title *">
+          </div>
+          <div class="form-row cols-3">
+            <input id="vidSeason" placeholder="Season">
+            <input id="vidEpisode" placeholder="Episode">
+            <input id="vidTime" placeholder="Time (e.g., 1:23:45)">
+          </div>
+          <div class="form-group">
+            <textarea id="vidNotes" placeholder="Notes" rows="2"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="addVideo()">💾 Save</button>
+        </div>
+        `
+                : `<p class="search-results-info">🔍 Found ${
+                      videos.length
+                  } result${videos.length !== 1 ? "s" : ""}</p>`
+        }
+        
+        ${videos
+            .map(
+                (v) => `
+          <div class="card media-card">
+            <div class="media-info">
+              <h3>${v.title}</h3>
+              <div class="media-meta">
+                ${v.season ? `<span>📺 S${v.season}</span>` : ""}
+                ${v.episode ? `<span>E${v.episode}</span>` : ""}
+                ${v.time ? `<span>⏱️ ${v.time}</span>` : ""}
+              </div>
+              ${
+                  v.notes
+                      ? `<p style="color: var(--text-muted); margin-top: 8px; font-size: 0.9rem;">${v.notes}</p>`
+                      : ""
+              }
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <button class="btn-icon" onclick="editVideo('${
+                  v.id
+              }')" title="Edit">✏️</button>
+              <button class="btn-icon danger" onclick="confirmDeleteVideo('${
+                  v.id
+              }')" title="Delete">🗑️</button>
+            </div>
+          </div>
+        `
+            )
+            .join("")}
+      `;
+            };
+
+            // Render Books - Ebook Reader Style
+            const renderBooks = () => {
+                const books = filtered(state.books, ["title"]);
+                const selectedBook = state.selectedBook
+                    ? state.books.find((b) => b.id === state.selectedBook)
+                    : null;
+
+                const highlightColors = [
+                    { color: "#fbbf24", name: "Yellow" },
+                    { color: "#f87171", name: "Red" },
+                    { color: "#60a5fa", name: "Blue" },
+                    { color: "#34d399", name: "Green" },
+                    { color: "#a78bfa", name: "Purple" },
+                    { color: "#fb923c", name: "Orange" },
+                ];
+
+                // If viewing a specific book's notes
+                if (selectedBook) {
+                    const bookNotes = (selectedBook.notes || []).sort(
+                        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+                    );
+
+                    return `
+                        <div class="book-reader">
+                            <div class="book-header">
+                                <button class="btn btn-secondary" onclick="state.selectedBook=null; render()">
+                                    ← Library
+                                </button>
+                                <div class="book-tabs">
+                                    <button class="tab-btn active">📝 Notes (${
+                                        bookNotes.length
+                                    })</button>
+                                </div>
+                            </div>
+                            
+                            <div class="book-title-bar">
+                                <div>
+                                    <h2>${selectedBook.title}</h2>
+                                    ${
+                                        selectedBook.totalPages > 0
+                                            ? `<div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">
+                                                Progress: ${Math.round(
+                                                    ((selectedBook.currentPage ||
+                                                        0) /
+                                                        selectedBook.totalPages) *
+                                                        100
+                                                )}% 
+                                                (${
+                                                    selectedBook.currentPage ||
+                                                    0
+                                                } / ${
+                                                  selectedBook.totalPages
+                                              } pages)
+                                               </div>`
+                                            : ""
+                                    }
+                                </div>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    ${
+                                        selectedBook.totalPages > 0
+                                            ? `<button class="btn btn-secondary btn-sm" onclick="updateBookProgress('${selectedBook.id}')">
+                                                📖 Update Progress
+                                               </button>`
+                                            : ""
+                                    }
+                                    <button class="btn-icon danger" onclick="confirmDeleteBook('${
+                                        selectedBook.id
+                                    }')" title="Delete Book">🗑️</button>
+                                </div>
+                            </div>
+                            
+                            <div class="book-notes-panel">
+                                <div class="notes-search-bar">
+                                    <input type="text" placeholder="🔍 Search notes..." class="notes-search" oninput="state.bookNotesSearch=this.value; render()">
+                                </div>
+                                
+                                <div class="highlight-colors">
+                                    <span style="font-size: 0.85rem; color: var(--text-muted);">Filter:</span>
+                                    <button class="color-filter ${
+                                        !state.bookColorFilter ? "active" : ""
+                                    }" onclick="state.bookColorFilter=null; render()">⊘</button>
+                                    ${highlightColors
+                                        .map(
+                                            (c) => `
+                                        <button class="color-filter ${
+                                            state.bookColorFilter === c.color
+                                                ? "active"
+                                                : ""
+                                        }" 
+                                                style="background: ${c.color};" 
+                                                onclick="state.bookColorFilter='${
+                                                    c.color
+                                                }'; render()"
+                                                title="${c.name}"></button>
+                                    `
+                                        )
+                                        .join("")}
+                                </div>
+                                
+                                <div class="book-notes-list">
+                                    ${bookNotes
+                                        .filter((n) => {
+                                            if (
+                                                state.bookColorFilter &&
+                                                n.highlightColor !==
+                                                    state.bookColorFilter
+                                            )
+                                                return false;
+                                            if (state.bookNotesSearch) {
+                                                const q =
+                                                    state.bookNotesSearch.toLowerCase();
+                                                return (
+                                                    n.highlight
+                                                        ?.toLowerCase()
+                                                        .includes(q) ||
+                                                    n.note
+                                                        ?.toLowerCase()
+                                                        .includes(q)
+                                                );
+                                            }
+                                            return true;
+                                        })
+                                        .map(
+                                            (n) => `
+                                        <div class="book-note-card ${
+                                            n.isImportant ? "important" : ""
+                                        }" style="border-left-color: ${
+                                                n.highlightColor || "#fbbf24"
+                                            }">
+                                            <div class="note-header-row">
+                                                <span class="note-date-time">${formatDateTime(
+                                                    n.createdAt
+                                                )}</span>
+                                                <span class="note-page">p.${
+                                                    n.page || "?"
+                                                }</span>
+                                                <button class="btn-icon danger" onclick="deleteBookNote('${
+                                                    selectedBook.id
+                                                }', '${
+                                                n.id
+                                            }')" title="Delete">🗑️</button>
+                                            </div>
+                                            
+                                            ${
+                                                n.highlight
+                                                    ? `
+                                                <div class="note-highlight" style="border-left-color: ${
+                                                    n.highlightColor ||
+                                                    "#fbbf24"
+                                                }">
+                                                    ${n.highlight}
+                                                </div>
+                                            `
+                                                    : ""
+                                            }
+                                            
+                                            ${
+                                                state.editingBookNote === n.id
+                                                    ? `
+                                                <div class="edit-note-form">
+                                                    <textarea id="editNoteText-${
+                                                        n.id
+                                                    }" rows="2" placeholder="Your note...">${
+                                                          n.note || ""
+                                                      }</textarea>
+                                                    <div class="edit-actions">
+                                                        <label class="important-toggle">
+                                                            <input type="checkbox" id="editImportant-${
+                                                                n.id
+                                                            }" ${
+                                                          n.isImportant
+                                                              ? "checked"
+                                                              : ""
+                                                      }>
+                                                            ⭐ Important
+                                                        </label>
+                                                        <button class="btn btn-primary btn-sm" onclick="saveBookNoteEdit('${
+                                                            selectedBook.id
+                                                        }', '${
+                                                          n.id
+                                                      }')">Save</button>
+                                                        <button class="btn btn-secondary btn-sm" onclick="state.editingBookNote=null; render()">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            `
+                                                    : `
+                                                ${
+                                                    n.note
+                                                        ? `<div class="note-text">${n.note}</div>`
+                                                        : ""
+                                                }
+                                                <button class="add-note-btn" onclick="state.editingBookNote='${
+                                                    n.id
+                                                }'; render()">
+                                                    ✏️ Edit note
+                                                </button>
+                                            `
+                                            }
+                                        </div>
+                                    `
+                                        )
+                                        .join("")}
+                                    
+                                    <!-- Add New Note Form -->
+                                    <div class="add-note-card">
+                                        <h4>➕ Add New Note</h4>
+                                        <div class="form-row cols-2">
+                                            <input id="newNotePage" type="number" placeholder="Page #" style="width: 100px;">
+                                            <div class="highlight-colors" style="flex:1">
+                                                ${highlightColors
+                                                    .map(
+                                                        (c) => `
+                                                    <button class="color-option ${
+                                                        (state.newNoteColor ||
+                                                            "#fbbf24") ===
+                                                        c.color
+                                                            ? "selected"
+                                                            : ""
+                                                    }" 
+                                                            style="background: ${
+                                                                c.color
+                                                            };" 
+                                                            onclick="state.newNoteColor='${
+                                                                c.color
+                                                            }'; render()"
+                                                            title="${
+                                                                c.name
+                                                            }"></button>
+                                                `
+                                                    )
+                                                    .join("")}
+                                            </div>
+                                        </div>
+                                        <textarea id="newNoteHighlight" placeholder="Highlighted text / quote from book..." rows="2"></textarea>
+                                        <textarea id="newNoteText" placeholder="Your personal note..." rows="2"></textarea>
+                                        <div class="form-actions">
+                                            <label class="important-toggle">
+                                                <input type="checkbox" id="newNoteImportant">
+                                                ⭐ Mark as Important
+                                            </label>
+                                            <button class="btn btn-primary" onclick="addBookNote('${
+                                                selectedBook.id
+                                            }')">💾 Save Note</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Library View - List of Books
+                return `
+                    <div class="card form-card">
+                        <h2>📚 Add New Book</h2>
+                        <div class="form-group">
+                            <input id="bookTitle" placeholder="Book Title *">
+                        </div>
+                        <div class="form-group">
+                            <input id="bookAuthor" placeholder="Author">
+                        </div>
+                        <div class="form-row cols-2">
+                            <input id="bookCurrentPage" type="number" placeholder="Current Page" min="0">
+                            <input id="bookTotalPages" type="number" placeholder="Total Pages" min="1">
+                        </div>
+                        <button class="btn btn-primary" onclick="addBook()">📚 Add to Library</button>
+                    </div>
+                    
+                    <div class="books-library">
+                        ${
+                            books.length === 0
+                                ? `
+                            <div class="empty-state">
+                                <span style="font-size: 3rem;">📚</span>
+                                <p>No books yet. Add your first book above!</p>
+                            </div>
+                        `
+                                : ""
+                        }
+                        ${books
+                            .map((b) => {
+                                const noteCount = (b.notes || []).length;
+                                const importantCount = (b.notes || []).filter(
+                                    (n) => n.isImportant
+                                ).length;
+                                const progress =
+                                    b.totalPages > 0
+                                        ? Math.round(
+                                              ((b.currentPage || 0) /
+                                                  b.totalPages) *
+                                                  100
+                                          )
+                                        : 0;
+                                return `
+                                <div class="book-card" onclick="state.selectedBook='${
+                                    b.id
+                                }'; render()">
+                                    <div class="book-cover">📖</div>
+                                    <div class="book-info">
+                                        <h3>${b.title}</h3>
+                                        ${
+                                            b.author
+                                                ? `<p class="book-author">by ${b.author}</p>`
+                                                : ""
+                                        }
+                                        ${
+                                            b.totalPages > 0
+                                                ? `<div class="book-progress">
+                                                    <div class="progress-bar">
+                                                        <div class="progress-fill" style="width: ${progress}%"></div>
+                                                    </div>
+                                                    <span class="progress-text">${
+                                                        b.currentPage || 0
+                                                    }/${
+                                                      b.totalPages
+                                                  } (${progress}%)</span>
+                                                </div>`
+                                                : ""
+                                        }
+                                        <div class="book-meta">
+                                            <span class="note-count">📝 ${noteCount} note${
+                                    noteCount !== 1 ? "s" : ""
+                                }</span>
+                                            ${
+                                                importantCount > 0
+                                                    ? `<span class="important-count">⭐ ${importantCount}</span>`
+                                                    : ""
+                                            }
+                                        </div>
+                                    </div>
+                                    <button class="btn-icon danger" onclick="event.stopPropagation(); confirmDeleteBook('${
+                                        b.id
+                                    }')" title="Delete">🗑️</button>
+                                </div>
+                            `;
+                            })
+                            .join("")}
+                    </div>
+                `;
+            };
+
+            // Render Notes
+            const renderNotes = () => {
+                const notes = filtered(state.notes, ["title", "content"]);
+                const pinnedNotes = notes.filter((n) => n.pinned);
+                const regularNotes = notes.filter((n) => !n.pinned);
+                const allNotes = [...pinnedNotes, ...regularNotes];
+
+                const colors = [
+                    "#fbbf24",
+                    "#f87171",
+                    "#60a5fa",
+                    "#34d399",
+                    "#a78bfa",
+                    "#fb923c",
+                ];
+
+                return `
+        <div class="card form-card">
+          <h2>📒 Add Note</h2>
+          <div class="form-group">
+            <input id="noteTitle" placeholder="Title">
+          </div>
+          <div class="form-group">
+            <textarea id="noteContent" placeholder="Content..." rows="4"></textarea>
+          </div>
+          <div class="form-group">
+            <input id="noteCategory" placeholder="Category (optional)">
+          </div>
+          <div class="color-picker">
+            ${colors
+                .map(
+                    (c) => `
+              <button class="color-option ${
+                  state.noteColor === c ? "selected" : ""
+              }" 
+                      style="background-color: ${c};" 
+                      onclick="state.noteColor='${c}'; render()"></button>
+            `
+                )
+                .join("")}
+          </div>
+          <button class="btn btn-primary" onclick="addNote()">💾 Save Note</button>
+        </div>
+        
+        <div class="notes-grid">
+          ${allNotes
+              .map(
+                  (n) => `
+            <div class="note-card ${
+                n.pinned ? "pinned" : ""
+            }" style="background-color: ${n.color}30;">
+              <div class="note-header">
+                <h3>${n.title || "Untitled"}</h3>
+                <div style="display: flex; gap: 4px;">
+                  <button class="btn-icon" onclick="togglePin('${
+                      n.id
+                  }')" title="Pin" style="color: ${
+                      n.pinned ? "#f59e0b" : "#64748b"
+                  };">📌</button>
+                  <button class="btn-icon" onclick="editNote('${
+                      n.id
+                  }')" title="Edit">✏️</button>
+                  <button class="btn-icon danger" onclick="confirmDeleteNote('${
+                      n.id
+                  }')" title="Delete">🗑️</button>
+                </div>
+              </div>
+              <div class="note-content">${n.content}</div>
+              <div class="note-footer">
+                <span class="note-date">${formatDate(
+                    n.date || n.updatedAt
+                )}</span>
+                ${
+                    n.category
+                        ? `<span class="note-category">${n.category}</span>`
+                        : ""
+                }
+              </div>
+            </div>
+          `
+              )
+              .join("")}
+        </div>
+      `;
+            };
+
+            // Action handlers
+            window.changeTab = (tab) => {
+                state.tab = tab;
+                state.search = ""; // Clear search when switching tabs
+                state.selectedBook = null; // Reset book selection
+                render();
+            };
+
+            window.toggleTheme = () => {
+                state.theme = state.theme === "dark" ? "light" : "dark";
+                document.body.setAttribute("data-theme", state.theme);
+                localStorage.setItem("theme", state.theme);
+                render();
+            };
+
+            window.addTodo = () => {
+                const text = document.getElementById("newTodo").value.trim();
+                if (!text) return;
+                const dueDate = document.getElementById("todoDueDate").value;
+                state.todos.unshift({
+                    id: uuid(),
+                    text,
+                    done: false,
+                    priority: state.newTodoPriority,
+                    dueDate: dueDate || null,
+                    updatedAt: new Date().toISOString(),
+                });
+                save("todos");
+                render();
+            };
+
+            window.toggleTodo = (id) => {
+                const todo = state.todos.find((t) => t.id === id);
+                todo.done = !todo.done;
+                todo.updatedAt = new Date().toISOString();
+                save("todos");
+                render();
+            };
+
+            window.saveEdit = (id) => {
+                const input = document.getElementById(`edit-${id}`);
+                const todo = state.todos.find((t) => t.id === id);
+                todo.text = input.value;
+                todo.updatedAt = new Date().toISOString();
+                delete state.editing[id];
+                save("todos");
+                render();
+            };
+
+            window.confirmDeleteTodo = (id) => {
+                showConfirm(
+                    "Are you sure you want to delete this todo?",
+                    () => {
+                        state.todos = state.todos.filter((t) => t.id !== id);
+                        save("todos");
+                        render();
+                    }
+                );
+            };
+
+            window.addPassword = async () => {
+                const title = document.getElementById("pwdTitle").value;
+                const pass = document.getElementById("pwdPass").value;
+                if (!title || !pass) {
+                    showToast("Title and password required!");
+                    return;
+                }
+
+                const qs = [];
+                for (let i = 0; i < 3; i++) {
+                    const q = document.getElementById(`q${i}`).value;
+                    const a = document.getElementById(`a${i}`).value;
+                    qs.push({
+                        q,
+                        a: a ? await encrypt(a) : "",
+                    });
+                }
+
+                state.passwords.push({
+                    id: uuid(),
+                    title,
+                    user: document.getElementById("pwdUser").value,
+                    pass: await encrypt(pass),
+                    qs,
+                    notes: document.getElementById("pwdNotes").value,
+                    updatedAt: new Date().toISOString(),
+                });
+                save("passwords");
+                render();
+            };
+
+            window.copyPassword = async (id) => {
+                const p = state.passwords.find((p) => p.id === id);
+                const decrypted = await decrypt(p.pass);
+                copyToClipboard(decrypted);
+            };
+
+            window.confirmDeletePassword = (id) => {
+                showConfirm(
+                    "Are you sure you want to delete this password?",
+                    () => {
+                        state.passwords = state.passwords.filter(
+                            (p) => p.id !== id
+                        );
+                        save("passwords");
+                        render();
+                    }
+                );
+            };
+
+            window.addVideo = () => {
+                const title = document.getElementById("vidTitle").value;
+                if (!title) return;
+                state.videos.push({
+                    id: uuid(),
+                    title,
+                    season: document.getElementById("vidSeason").value,
+                    episode: document.getElementById("vidEpisode").value,
+                    time: document.getElementById("vidTime").value,
+                    notes: document.getElementById("vidNotes").value,
+                    updatedAt: new Date().toISOString(),
+                });
+                save("videos");
+                render();
+            };
+
+            window.confirmDeleteVideo = (id) => {
+                showConfirm(
+                    "Are you sure you want to delete this video?",
+                    () => {
+                        state.videos = state.videos.filter((v) => v.id !== id);
+                        save("videos");
+                        render();
+                    }
+                );
+            };
+
+            window.editPassword = (id) => {
+                const p = state.passwords.find((p) => p.id === id);
+                if (!p) return;
+                const modals = document.getElementById("modals");
+                modals.innerHTML = `
+                    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                        <div class="modal" style="max-width: 500px;">
+                            <div class="modal-header">
+                                <h2>✏️ Edit Password</h2>
+                                <button class="btn-icon" onclick="closeModal()">✕</button>
+                            </div>
+                            <div class="form-group">
+                                <input id="editPwdTitle" value="${
+                                    p.title
+                                }" placeholder="Title *">
+                            </div>
+                            <div class="form-group">
+                                <input id="editPwdUser" value="${
+                                    p.user || ""
+                                }" placeholder="Username">
+                            </div>
+                            <div class="form-group">
+                                <textarea id="editPwdNotes" placeholder="Notes" rows="2">${
+                                    p.notes || ""
+                                }</textarea>
+                            </div>
+                            <div style="display: flex; gap: 12px;">
+                                <button class="btn btn-secondary" style="flex:1" onclick="closeModal()">Cancel</button>
+                                <button class="btn btn-primary" style="flex:1" onclick="savePasswordEdit('${id}')">💾 Save</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            };
+
+            window.savePasswordEdit = (id) => {
+                const p = state.passwords.find((p) => p.id === id);
+                if (!p) return;
+                p.title = document.getElementById("editPwdTitle").value;
+                p.user = document.getElementById("editPwdUser").value;
+                p.notes = document.getElementById("editPwdNotes").value;
+                p.updatedAt = new Date().toISOString();
+                save("passwords");
+                closeModal();
+                render();
+            };
+
+            window.editVideo = (id) => {
+                const v = state.videos.find((v) => v.id === id);
+                if (!v) return;
+                const modals = document.getElementById("modals");
+                modals.innerHTML = `
+                    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                        <div class="modal" style="max-width: 500px;">
+                            <div class="modal-header">
+                                <h2>✏️ Edit Video</h2>
+                                <button class="btn-icon" onclick="closeModal()">✕</button>
+                            </div>
+                            <div class="form-group">
+                                <input id="editVidTitle" value="${
+                                    v.title
+                                }" placeholder="Title *">
+                            </div>
+                            <div class="form-row cols-3">
+                                <input id="editVidSeason" value="${
+                                    v.season || ""
+                                }" placeholder="Season">
+                                <input id="editVidEpisode" value="${
+                                    v.episode || ""
+                                }" placeholder="Episode">
+                                <input id="editVidTime" value="${
+                                    v.time || ""
+                                }" placeholder="Time">
+                            </div>
+                            <div class="form-group">
+                                <textarea id="editVidNotes" placeholder="Notes" rows="2">${
+                                    v.notes || ""
+                                }</textarea>
+                            </div>
+                            <div style="display: flex; gap: 12px;">
+                                <button class="btn btn-secondary" style="flex:1" onclick="closeModal()">Cancel</button>
+                                <button class="btn btn-primary" style="flex:1" onclick="saveVideoEdit('${id}')">💾 Save</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            };
+
+            window.saveVideoEdit = (id) => {
+                const v = state.videos.find((v) => v.id === id);
+                if (!v) return;
+                v.title = document.getElementById("editVidTitle").value;
+                v.season = document.getElementById("editVidSeason").value;
+                v.episode = document.getElementById("editVidEpisode").value;
+                v.time = document.getElementById("editVidTime").value;
+                v.notes = document.getElementById("editVidNotes").value;
+                v.updatedAt = new Date().toISOString();
+                save("videos");
+                closeModal();
+                render();
+            };
+
+            window.addBook = () => {
+                const title = document.getElementById("bookTitle").value;
+                if (!title) return;
+                const authorEl = document.getElementById("bookAuthor");
+                const currentPageEl =
+                    document.getElementById("bookCurrentPage");
+                const totalPagesEl = document.getElementById("bookTotalPages");
+                state.books.push({
+                    id: uuid(),
+                    title,
+                    author: authorEl ? authorEl.value : "",
+                    currentPage: currentPageEl
+                        ? parseInt(currentPageEl.value) || 0
+                        : 0,
+                    totalPages: totalPagesEl
+                        ? parseInt(totalPagesEl.value) || 0
+                        : 0,
+                    notes: [],
+                    updatedAt: new Date().toISOString(),
+                });
+                save("books");
+                render();
+            };
+
+            window.updateBookProgress = (id) => {
+                const book = state.books.find((b) => b.id === id);
+                if (!book) return;
+
+                const modals = document.getElementById("modals");
+                modals.innerHTML = `
+                    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                        <div class="modal" style="max-width: 400px;">
+                            <div class="modal-header">
+                                <h2>📖 Update Progress</h2>
+                                <button class="btn-icon" onclick="closeModal()">✕</button>
+                            </div>
+                            <div class="form-group">
+                                <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-secondary);">Current Page</label>
+                                <input id="updatePageInput" type="number" value="${
+                                    book.currentPage || 0
+                                }" min="0" max="${book.totalPages}">
+                            </div>
+                            <div class="form-group">
+                                <p style="font-size: 0.85rem; color: var(--text-muted);">
+                                    Total Pages: ${book.totalPages}
+                                </p>
+                            </div>
+                            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                                <button class="btn btn-secondary" style="flex:1" onclick="closeModal()">Cancel</button>
+                                <button class="btn btn-primary" style="flex:1" onclick="saveBookProgress('${id}')">💾 Save</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                // Focus input
+                setTimeout(
+                    () => document.getElementById("updatePageInput").focus(),
+                    100
+                );
+            };
+
+            window.saveBookProgress = (id) => {
+                const book = state.books.find((b) => b.id === id);
+                if (!book) return;
+
+                const newPage =
+                    parseInt(
+                        document.getElementById("updatePageInput").value
+                    ) || 0;
+                if (newPage > book.totalPages) {
+                    showToast("Page cannot exceed total pages!");
+                    return;
+                }
+
+                book.currentPage = newPage;
+                book.updatedAt = new Date().toISOString();
+                save("books");
+                closeModal();
+                render();
+            };
+
+            window.addBookNote = (bookId) => {
+                const book = state.books.find((b) => b.id === bookId);
+                if (!book) return;
+
+                const page =
+                    document.getElementById("newNotePage")?.value || "";
+                const highlight =
+                    document.getElementById("newNoteHighlight")?.value || "";
+                const note =
+                    document.getElementById("newNoteText")?.value || "";
+                const isImportant =
+                    document.getElementById("newNoteImportant")?.checked ||
+                    false;
+
+                if (!highlight && !note) {
+                    showToast("Please add a highlight or note!");
+                    return;
+                }
+
+                if (!book.notes) book.notes = [];
+                book.notes.push({
+                    id: uuid(),
+                    page,
+                    highlight,
+                    highlightColor: state.newNoteColor || "#fbbf24",
+                    note,
+                    isImportant,
+                    createdAt: new Date().toISOString(),
+                });
+                book.updatedAt = new Date().toISOString();
+                save("books");
+                render();
+            };
+
+            window.saveBookNoteEdit = (bookId, noteId) => {
+                const book = state.books.find((b) => b.id === bookId);
+                if (!book) return;
+
+                const bookNote = book.notes.find((n) => n.id === noteId);
+                if (!bookNote) return;
+
+                const noteText =
+                    document.getElementById(`editNoteText-${noteId}`)?.value ||
+                    "";
+                const isImportant =
+                    document.getElementById(`editImportant-${noteId}`)
+                        ?.checked || false;
+
+                bookNote.note = noteText;
+                bookNote.isImportant = isImportant;
+                book.updatedAt = new Date().toISOString();
+                state.editingBookNote = null;
+                save("books");
+                render();
+            };
+
+            window.deleteBookNote = (bookId, noteId) => {
+                showConfirm(
+                    "Are you sure you want to delete this note?",
+                    () => {
+                        const book = state.books.find((b) => b.id === bookId);
+                        if (!book) return;
+                        book.notes = book.notes.filter((n) => n.id !== noteId);
+                        book.updatedAt = new Date().toISOString();
+                        save("books");
+                        render();
+                    }
+                );
+            };
+
+            window.confirmDeleteBook = (id) => {
+                showConfirm(
+                    "Are you sure you want to delete this book and all its notes?",
+                    () => {
+                        state.books = state.books.filter((b) => b.id !== id);
+                        state.selectedBook = null;
+                        save("books");
+                        render();
+                    }
+                );
+            };
+
+            window.addNote = () => {
+                const title = document.getElementById("noteTitle").value;
+                const content = document.getElementById("noteContent").value;
+                if (!title && !content) return;
+                state.notes.unshift({
+                    id: uuid(),
+                    title,
+                    content,
+                    color: state.noteColor || "#fbbf24",
+                    category: document.getElementById("noteCategory").value,
+                    pinned: false,
+                    date: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                });
+                save("notes");
+                render();
+            };
+
+            window.togglePin = (id) => {
+                const note = state.notes.find((n) => n.id === id);
+                note.pinned = !note.pinned;
+                note.updatedAt = new Date().toISOString();
+                save("notes");
+                render();
+            };
+
+            window.confirmDeleteNote = (id) => {
+                showConfirm(
+                    "Are you sure you want to delete this note?",
+                    () => {
+                        state.notes = state.notes.filter((n) => n.id !== id);
+                        save("notes");
+                        render();
+                    }
+                );
+            };
+
+            window.editNote = (id) => {
+                const n = state.notes.find((n) => n.id === id);
+                if (!n) return;
+                const modals = document.getElementById("modals");
+                modals.innerHTML = `
+                    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                        <div class="modal" style="max-width: 500px;">
+                            <div class="modal-header">
+                                <h2>✏️ Edit Note</h2>
+                                <button class="btn-icon" onclick="closeModal()">✕</button>
+                            </div>
+                            <div class="form-group">
+                                <input id="editNoteTitle" value="${
+                                    n.title || ""
+                                }" placeholder="Title">
+                            </div>
+                            <div class="form-group">
+                                <textarea id="editNoteContent" rows="4" placeholder="Content...">${
+                                    n.content || ""
+                                }</textarea>
+                            </div>
+                            <div class="form-group">
+                                <input id="editNoteCategory" value="${
+                                    n.category || ""
+                                }" placeholder="Category">
+                            </div>
+                            <div style="display: flex; gap: 12px;">
+                                <button class="btn btn-secondary" style="flex:1" onclick="closeModal()">Cancel</button>
+                                <button class="btn btn-primary" style="flex:1" onclick="saveNoteEdit('${id}')">💾 Save</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            };
+
+            window.saveNoteEdit = (id) => {
+                const n = state.notes.find((n) => n.id === id);
+                if (!n) return;
+                n.title = document.getElementById("editNoteTitle").value;
+                n.content = document.getElementById("editNoteContent").value;
+                n.category = document.getElementById("editNoteCategory").value;
+                n.updatedAt = new Date().toISOString();
+                save("notes");
+                closeModal();
+                render();
+            };
+
+            window.handleSync = () => {
+                state.syncStatus = "syncing";
+                render();
+                // Placeholder - will be implemented with cloud sync
+                setTimeout(() => {
+                    state.syncStatus = "idle";
+                    showToast("Sync feature coming soon!");
+                    render();
+                }, 1500);
+            };
+
+            // Keyboard shortcuts
+            const setupKeyboardShortcuts = () => {
+                document.onkeydown = (e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                        const tabs = [
+                            "todos",
+                            "passwords",
+                            "videos",
+                            "books",
+                            "notes",
+                        ];
+                        if (e.key >= "1" && e.key <= "5") {
+                            e.preventDefault();
+                            changeTab(tabs[parseInt(e.key) - 1]);
+                        }
+                    }
+                };
+            };
+
+            // Listen for tab changes from tray
+            if (window.electronAPI) {
+                electronAPI.onChangeTab((tab) => {
+                    state.tab = tab;
+                    render();
+                });
+            }
+
+            // Initial render
+            render();
+        </script>
+    </body>
+</html>
