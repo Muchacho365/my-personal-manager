@@ -17,14 +17,6 @@ export const renderNotes = (renderCallback) => {
     };
 
     const notes = filtered(state.notes, ["title", "content"]);
-    const colors = [
-        "#fbbf24",
-        "#f87171",
-        "#60a5fa",
-        "#34d399",
-        "#a78bfa",
-        "#fb923c",
-    ];
 
     return `
       <div class="card form-card">
@@ -37,19 +29,6 @@ export const renderNotes = (renderCallback) => {
         </div>
         <div class="form-group">
           <input id="noteCategory" placeholder="Category (optional)">
-        </div>
-        <div class="color-picker">
-          ${colors
-              .map(
-                  (c) => `
-            <button class="color-option ${
-                state.noteColor === c ? "selected" : ""
-            }"
-                    style="background-color: ${c};"
-                    onclick="state.noteColor='${c}'; render()"></button>
-          `
-              )
-              .join("")}
         </div>
         <button class="btn btn-primary" onclick="window.addNote()">💾 Save Note</button>
       </div>

@@ -15,8 +15,7 @@ const render = async () => {
     // Header and Tabs
     const headerHtml = `
       <header class="header">
-        <h1>Muchacho Personal Manager</h1>
-        <p>Todo • Passwords • Videos • Books • Notes</p>
+        <h1>Muchacho's Personal Manager</h1>
       </header>
     `;
 
