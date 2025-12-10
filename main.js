@@ -5,10 +5,12 @@ const {
     ipcMain,
     clipboard,
     globalShortcut,
+    dialog,
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const CryptoJS = require("crypto-js");
+const { autoUpdater } = require("electron-updater");
 
 let mainWindow;
 const ENCRYPTION_KEY = "PersonalManager2024SecureKey";
@@ -40,7 +42,39 @@ function createWindow() {
     mainWindow.on("closed", () => {
         mainWindow = null;
     });
+
+    // Check for updates
+    if (app.isPackaged) {
+        autoUpdater.checkForUpdatesAndNotify();
+    }
 }
+
+// Auto-updater events
+autoUpdater.on("update-available", () => {
+    dialog.showMessageBox(mainWindow, {
+        type: "info",
+        title: "Update Available",
+        message:
+            "A new version is available. It will be downloaded in the background.",
+        buttons: ["OK"],
+    });
+});
+
+autoUpdater.on("update-downloaded", () => {
+    dialog
+        .showMessageBox(mainWindow, {
+            type: "info",
+            title: "Update Ready",
+            message:
+                "A new version has been downloaded. Restart now to install?",
+            buttons: ["Restart", "Later"],
+        })
+        .then((result) => {
+            if (result.response === 0) {
+                autoUpdater.quitAndInstall();
+            }
+        });
+});
 
 app.whenReady().then(() => {
     createWindow();
@@ -160,5 +194,23 @@ ipcMain.handle("save-data", (event, data) => {
     } catch (error) {
         console.error("Failed to save data:", error);
         return false;
+    }
+});
+
+ipcMain.handle("check-for-updates", () => {
+    if (app.isPackaged) {
+        autoUpdater.checkForUpdatesAndNotify();
+    }
+});
+
+autoUpdater.on("error", (err) => {
+    if (mainWindow) {
+        mainWindow.webContents.send("update-error", err.toString());
+    }
+});
+
+autoUpdater.on("update-not-available", () => {
+    if (mainWindow) {
+        mainWindow.webContents.send("update-not-available");
     }
 });

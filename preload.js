@@ -25,4 +25,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Data Persistence
     loadData: () => ipcRenderer.invoke("load-data"),
     saveData: (data) => ipcRenderer.invoke("save-data", data),
+
+    // Auto Update
+    checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+    onUpdateAvailable: (callback) =>
+        ipcRenderer.on("update-available", () => callback()),
+    onUpdateDownloaded: (callback) =>
+        ipcRenderer.on("update-downloaded", () => callback()),
+    onUpdateNotAvailable: (callback) =>
+        ipcRenderer.on("update-not-available", () => callback()),
+    onUpdateError: (callback) =>
+        ipcRenderer.on("update-error", (event, err) => callback(err)),
 });

@@ -16,7 +16,8 @@
         "electron-builder": "^24.9.1"
     },
     "dependencies": {
-        "crypto-js": "^4.2.0"
+        "crypto-js": "^4.2.0",
+        "electron-updater": "^6.6.2"
     },
     "build": {
         "appId": "com.muchacho.personal-manager",
@@ -41,7 +42,14 @@
                 "portable"
             ],
             "icon": "assets/icon.ico",
-            "signAndEditExecutable": false
+            "signAndEditExecutable": false,
+            "publish": [
+                {
+                    "provider": "github",
+                    "owner": "Muchacho",
+                    "repo": "muchacho-personal-manager"
+                }
+            ]
         },
         "nsis": {
             "oneClick": false,
