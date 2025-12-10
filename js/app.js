@@ -62,6 +62,9 @@ const render = async () => {
         <button class="theme-toggle" onclick="window.toggleTheme()" title="Toggle Dark/Light Mode">
           ${state.theme === "dark" ? "☀️" : "🌙"}
         </button>
+        <button class="sync-btn" onclick="window.checkForUpdates()" title="Check for Updates">
+          <span class="sync-icon">🔄</span> Update
+        </button>
         <button class="sync-btn ${
             state.syncStatus === "syncing" ? "syncing" : ""
         }" onclick="window.handleSync()">
@@ -126,6 +129,13 @@ window.toggleTheme = () => {
     render();
 };
 
+window.checkForUpdates = () => {
+    showToast("Checking for updates...");
+    if (window.electronAPI) {
+        window.electronAPI.checkForUpdates();
+    }
+};
+
 window.handleSync = () => {
     state.syncStatus = "syncing";
     render();
@@ -172,6 +182,20 @@ const init = async () => {
     if (window.electronAPI) {
         window.electronAPI.onChangeTab((tab) => {
             window.changeTab(tab);
+        });
+
+        // Update listeners
+        window.electronAPI.onUpdateAvailable(() => {
+            showToast("Update available! Downloading...");
+        });
+
+        window.electronAPI.onUpdateNotAvailable(() => {
+            showToast("You are on the latest version.");
+        });
+
+        window.electronAPI.onUpdateError((err) => {
+            console.error(err);
+            showToast("Error checking for updates.");
         });
     }
 };
