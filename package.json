@@ -44,8 +44,8 @@
             "publish": [
                 {
                     "provider": "github",
-                    "owner": "Muchacho",
-                    "repo": "muchacho-personal-manager"
+                    "owner": "Muchacho365",
+                    "repo": "my-personal-manager"
                 }
             ]
         },
