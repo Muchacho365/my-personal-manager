@@ -45,7 +45,7 @@ export const renderNotes = (renderCallback) => {
                 <button class="btn-icon" onclick="event.stopPropagation(); window.togglePin('${
                     n.id
                 }')" title="Pin" style="color: ${
-                    n.pinned ? "#3b3b3bff" : "#64748b"
+                    n.pinned ? "#648ca3ff" : "#64748b"
                 };">📌</button>
                 <button class="btn-icon" onclick="event.stopPropagation(); window.editNote('${
                     n.id
