@@ -1,13 +1,12 @@
 {
     "name": "muchacho-personal-manager",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Muchacho Personal Manager - Todo, Passwords, Videos, Books, Notes",
     "main": "main.js",
     "scripts": {
         "start": "electron .",
         "dev": "electron .",
-        "build": "electron-builder --win",
-        "build:portable": "electron-builder --win portable"
+        "build": "electron-builder --win && rmdir /s /q dist\\win-unpacked"
     },
     "author": "Muchacho",
     "license": "MIT",
@@ -30,6 +29,7 @@
             "preload.js",
             "index.html",
             "styles.css",
+            "js/**/*",
             "assets/**/*",
             "!node_modules/**/*.md",
             "!node_modules/**/*.txt",

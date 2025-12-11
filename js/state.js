@@ -16,6 +16,7 @@ export const state = {
     noteColor: "#fbbf24",
     syncStatus: "idle",
     theme: "dark",
+    sidebarCollapsed: localStorage.getItem("sidebarCollapsed") === "true",
     selectedBook: null,
     bookColorFilter: null,
     bookNotesSearch: "",

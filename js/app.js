@@ -27,7 +27,10 @@ const render = async () => {
 
     // Sidebar
     const sidebarHtml = `
-      <aside class="sidebar">
+      <aside class="sidebar ${state.sidebarCollapsed ? "collapsed" : ""}">
+        <button class="sidebar-toggle" onclick="window.toggleSidebar()">
+            ‹
+        </button>
         <div class="sidebar-header">
           <h1>Personal Manager</h1>
           <p>Welcome back, Muchacho</p>
@@ -137,6 +140,12 @@ window.changeTab = (tab) => {
     state.tab = tab;
     state.search = "";
     state.selectedBook = null;
+    render();
+};
+
+window.toggleSidebar = () => {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    localStorage.setItem("sidebarCollapsed", state.sidebarCollapsed);
     render();
 };
 
