@@ -12,6 +12,11 @@ const fs = require("fs");
 const CryptoJS = require("crypto-js");
 const { autoUpdater } = require("electron-updater");
 
+// Global error handling
+process.on("uncaughtException", (error) => {
+    dialog.showErrorBox("An error occurred", error.stack || error.message);
+});
+
 let mainWindow;
 const ENCRYPTION_KEY = "PersonalManager2024SecureKey";
 const DATA_FILE = path.join(app.getPath("userData"), "data.json");

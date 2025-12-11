@@ -18,14 +18,73 @@ export const renderNotes = (renderCallback) => {
 
     const notes = filtered(state.notes, ["title", "content"]);
 
+    const toolbar = `
+        <div class="editor-toolbar">
+            <button class="btn-icon" onclick="document.execCommand('bold', false, null)" title="Bold"><b>B</b></button>
+            <button class="btn-icon" onclick="document.execCommand('italic', false, null)" title="Italic"><i>I</i></button>
+            <button class="btn-icon" onclick="document.execCommand('underline', false, null)" title="Underline"><u>U</u></button>
+            <div class="toolbar-separator"></div>
+            <button class="btn-icon" onclick="document.execCommand('insertUnorderedList', false, null)" title="Bullet List">•</button>
+            <button class="btn-icon" onclick="document.execCommand('insertOrderedList', false, null)" title="Numbered List">1.</button>
+            <div class="toolbar-separator"></div>
+            <button class="btn-icon" onclick="document.execCommand('justifyLeft', false, null)" title="Align Left">⇤</button>
+            <button class="btn-icon" onclick="document.execCommand('justifyCenter', false, null)" title="Align Center">↔</button>
+            <button class="btn-icon" onclick="document.execCommand('justifyRight', false, null)" title="Align Right">⇥</button>
+            <div class="toolbar-separator"></div>
+            <button class="btn-icon" onclick="document.execCommand('hiliteColor', false, '#fef08a')" title="Highlight" style="background: #fef08a; color: black;">H</button>
+        </div>
+    `;
+
     return `
+      <style>
+        .editor-toolbar {
+            display: flex;
+            gap: 4px;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: var(--radius-md) var(--radius-md) 0 0;
+            flex-wrap: wrap;
+        }
+        .toolbar-separator {
+            width: 1px;
+            background: var(--border);
+            margin: 0 4px;
+        }
+        .rich-editor {
+            min-height: 120px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0 0 var(--radius-md) var(--radius-md);
+            color: var(--text-primary);
+            outline: none;
+        }
+        .rich-editor:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+        .rich-editor ul, .rich-editor ol {
+            padding-left: 20px;
+        }
+        .rich-editor blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 10px;
+            color: var(--text-muted);
+        }
+      </style>
+
       <div class="card form-card">
         <h2>📒 Add Note</h2>
         <div class="form-group">
           <input id="noteTitle" placeholder="Title">
         </div>
         <div class="form-group">
-          <textarea id="noteContent" placeholder="Content..." rows="4"></textarea>
+            ${toolbar}
+            <div id="noteContent" class="rich-editor" contenteditable="true" placeholder="Content..."></div>
         </div>
         <div class="form-group">
           <input id="noteCategory" placeholder="Category (optional)">
@@ -77,10 +136,10 @@ export const renderNotes = (renderCallback) => {
 export const setupNoteActions = (render) => {
     window.addNote = () => {
         const title = document.getElementById("noteTitle").value;
-        const content = document.getElementById("noteContent").value;
+        const content = document.getElementById("noteContent").innerHTML;
         const category = document.getElementById("noteCategory").value;
 
-        if (!title && !content) {
+        if (!title && (!content || content === "<br>")) {
             showToast("Please add a title or content!");
             return;
         }
@@ -116,6 +175,24 @@ export const setupNoteActions = (render) => {
     window.editNote = (id) => {
         const n = state.notes.find((n) => n.id === id);
         if (!n) return;
+
+        const toolbar = `
+            <div class="editor-toolbar" style="background: var(--bg-primary);">
+                <button class="btn-icon" onclick="document.execCommand('bold', false, null)" title="Bold"><b>B</b></button>
+                <button class="btn-icon" onclick="document.execCommand('italic', false, null)" title="Italic"><i>I</i></button>
+                <button class="btn-icon" onclick="document.execCommand('underline', false, null)" title="Underline"><u>U</u></button>
+                <div class="toolbar-separator"></div>
+                <button class="btn-icon" onclick="document.execCommand('insertUnorderedList', false, null)" title="Bullet List">•</button>
+                <button class="btn-icon" onclick="document.execCommand('insertOrderedList', false, null)" title="Numbered List">1.</button>
+                <div class="toolbar-separator"></div>
+                <button class="btn-icon" onclick="document.execCommand('justifyLeft', false, null)" title="Align Left">⇤</button>
+                <button class="btn-icon" onclick="document.execCommand('justifyCenter', false, null)" title="Align Center">↔</button>
+                <button class="btn-icon" onclick="document.execCommand('justifyRight', false, null)" title="Align Right">⇥</button>
+                <div class="toolbar-separator"></div>
+                <button class="btn-icon" onclick="document.execCommand('hiliteColor', false, '#fef08a')" title="Highlight" style="background: #fef08a; color: black;">H</button>
+            </div>
+        `;
+
         const modals = document.getElementById("modals");
         modals.innerHTML = `
             <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
@@ -130,9 +207,11 @@ export const setupNoteActions = (render) => {
                         }" placeholder="Title" style="font-size: 1.8rem; font-weight: bold; padding: 16px;">
                     </div>
                     <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
-                        <textarea id="editNoteContent" style="flex: 1; resize: none; font-family: monospace; font-size: 1.2rem; padding: 16px; line-height: 1.6;" placeholder="Content...">${
-                            n.content || ""
-                        }</textarea>
+                        ${toolbar}
+                        <div id="editNoteContent" class="rich-editor" contenteditable="true" 
+                             style="flex: 1; resize: none; font-size: 1.2rem; padding: 16px; line-height: 1.6; border-radius: 0 0 var(--radius-md) var(--radius-md); border-top: none;">
+                             ${n.content || ""}
+                        </div>
                     </div>
                     <div class="form-group">
                         <input id="editNoteCategory" value="${
@@ -154,7 +233,7 @@ export const setupNoteActions = (render) => {
 
         const n = state.notes[index];
         n.title = document.getElementById("editNoteTitle").value;
-        n.content = document.getElementById("editNoteContent").value;
+        n.content = document.getElementById("editNoteContent").innerHTML;
         n.category = document.getElementById("editNoteCategory").value;
         n.updatedAt = new Date().toISOString();
 

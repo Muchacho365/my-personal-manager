@@ -12,44 +12,72 @@ import { showToast } from "./utils.js";
 const render = async () => {
     const app = document.getElementById("app");
 
-    // Header and Tabs
-    const headerHtml = `
-      <header class="header">
-        <h1>Muchacho's Personal Manager</h1>
-      </header>
-    `;
+    const tabs = [
+        { id: "todos", icon: "📝", label: "Todos", desc: "Manage your tasks" },
+        {
+            id: "passwords",
+            icon: "🔐",
+            label: "Passwords",
+            desc: "Secure vault",
+        },
+        { id: "videos", icon: "🎬", label: "Videos", desc: "Watch list" },
+        { id: "books", icon: "📚", label: "Books", desc: "Reading list" },
+        { id: "notes", icon: "📒", label: "Notes", desc: "Thoughts & ideas" },
+    ];
 
-    const tabsHtml = `
-      <div class="tabs">
-        ${["todos", "passwords", "videos", "books", "notes"]
-            .map(
-                (t) => `
-          <button class="tab-btn ${
-              state.tab === t ? "active" : ""
-          }" onclick="window.changeTab('${t}')">
-            <span>${
-                {
-                    todos: "📝",
-                    passwords: "🔐",
-                    videos: "🎬",
-                    books: "📚",
-                    notes: "📒",
-                }[t]
-            } ${t.charAt(0).toUpperCase() + t.slice(1)}</span>
+    // Sidebar
+    const sidebarHtml = `
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1>Personal Manager</h1>
+          <p>Welcome back, Muchacho</p>
+        </div>
+        
+        <nav class="nav-links">
+          ${tabs
+              .map(
+                  (t) => `
+            <button class="nav-item ${state.tab === t.id ? "active" : ""}" 
+                    onclick="window.changeTab('${t.id}')">
+              <span class="nav-icon">${t.icon}</span>
+              <div class="nav-text">
+                <span class="nav-label">${t.label}</span>
+                <span class="nav-desc">${t.desc}</span>
+              </div>
+            </button>
+          `
+              )
+              .join("")}
+        </nav>
+
+        <div class="sidebar-footer">
+          <button class="nav-item" onclick="window.toggleTheme()">
+            <span class="nav-icon">${
+                state.theme === "dark" ? "☀️" : "🌙"
+            }</span>
+            <span class="nav-label">${
+                state.theme === "dark" ? "Light Mode" : "Dark Mode"
+            }</span>
           </button>
-        `
-            )
-            .join("")}
-      </div>
+          <button class="nav-item" onclick="window.checkForUpdates()">
+            <span class="nav-icon">🔄</span>
+            <span class="nav-label">Check Updates</span>
+          </button>
+          <button class="nav-item" onclick="window.handleSync()">
+            <span class="nav-icon">☁️</span>
+            <span class="nav-label">Sync Data</span>
+          </button>
+        </div>
+      </aside>
     `;
 
-    // Toolbar
+    // Toolbar (Simplified for main content)
     const toolbarHtml = `
       <div class="toolbar">
         <div class="search-box">
-          <input type="text" class="search-input" placeholder="Search..." value="${
-              state.search
-          }"
+          <input type="text" class="search-input" placeholder="Search ${
+              state.tab
+          }..." value="${state.search}"
                  oninput="window.debounceSearch(this.value)"
                  ${state.search ? "autofocus" : ""}>
           ${
@@ -58,17 +86,6 @@ const render = async () => {
                   : ""
           }
         </div>
-        <button class="theme-toggle" onclick="window.toggleTheme()" title="Toggle Dark/Light Mode">
-          ${state.theme === "dark" ? "☀️" : "🌙"}
-        </button>
-        <button class="sync-btn" onclick="window.checkForUpdates()" title="Check for Updates">
-          <span class="sync-icon">🔄</span> Update
-        </button>
-        <button class="sync-btn ${
-            state.syncStatus === "syncing" ? "syncing" : ""
-        }" onclick="window.handleSync()">
-          <span class="sync-icon">☁️</span> Sync
-        </button>
         <div class="save-indicator ${state.saveStatus}">
           ${state.saveStatus === "saving" ? "💾 Saving..." : "✓ Saved"}
         </div>
@@ -95,13 +112,15 @@ const render = async () => {
             break;
     }
 
-    app.innerHTML =
-        headerHtml +
-        tabsHtml +
-        toolbarHtml +
-        `<div class="content">${contentHtml}</div>`;
+    app.innerHTML = `
+      ${sidebarHtml}
+      <main class="main-content">
+        ${toolbarHtml}
+        <div class="content">${contentHtml}</div>
+      </main>
+    `;
 
-    // Restore focus if needed (simple implementation)
+    // Restore focus if needed
     const searchInput = document.querySelector(".search-input");
     if (searchInput && state.search) {
         searchInput.focus();
