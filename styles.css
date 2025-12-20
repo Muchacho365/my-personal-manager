@@ -799,6 +799,237 @@ textarea {
     text-align: center;
 }
 
+/* ===== Sub-Tabs ===== */
+.sub-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+}
+
+.sub-tab {
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.sub-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.sub-tab.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent-soft);
+}
+
+/* ===== Schedule Styles ===== */
+.schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+}
+
+.schedule-day {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+}
+
+.schedule-day h3 {
+    font-size: 1rem;
+    color: var(--accent);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.schedule-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+}
+
+.schedule-item .time {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.schedule-item .title {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+/* ===== Reminder Styles ===== */
+.reminders-list {
+    display: grid;
+    gap: 12px;
+}
+
+.reminder-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+}
+
+.reminder-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.reminder-text {
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.reminder-time {
+    font-size: 0.85rem;
+    color: var(--accent);
+}
+
+/* ===== Sidebar Fixes ===== */
+/* Ensure icons are always visible and centered when collapsed */
+.sidebar.collapsed .nav-item {
+    justify-content: center !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.sidebar.collapsed .nav-icon {
+    margin: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+/* Fix for footer buttons specifically if they are behaving differently */
+/* ===== Kanban Board ===== */
+.kanban-board {
+    display: flex;
+    gap: 24px;
+    height: calc(100vh - 180px);
+    overflow-x: auto;
+    padding-bottom: 12px;
+}
+
+.kanban-column {
+    flex: 1;
+    min-width: 280px;
+    max-width: 350px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+}
+
+.kanban-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.kanban-header h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.kanban-header .count {
+    background: var(--bg-card);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.header-todo {
+    border-top: 3px solid var(--text-muted);
+}
+.header-progress {
+    border-top: 3px solid var(--accent);
+}
+.header-done {
+    border-top: 3px solid var(--success);
+}
+
+.kanban-items {
+    padding: 12px;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.kanban-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    cursor: grab;
+    margin-bottom: 0; /* Override default card margin */
+    box-shadow: var(--shadow-sm);
+}
+
+.kanban-card:active {
+    cursor: grabbing;
+}
+
+.kanban-card-content {
+    margin-bottom: 8px;
+}
+
+.kanban-text {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.kanban-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.add-card-btn {
+    padding: 8px;
+    text-align: center;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    transition: all 0.15s;
+}
+
+.add-card-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
 .confirm-dialog p {
     margin: 20px 0;
     color: var(--text-secondary);

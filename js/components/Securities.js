@@ -9,7 +9,41 @@ import {
     closeModal,
 } from "../utils.js";
 
-export const renderPasswords = async (renderCallback) => {
+export const renderSecurities = async (renderCallback) => {
+    const subTab = state.securitiesSubTab || "passwords";
+
+    const renderSubTabs = () => `
+        <div class="sub-tabs">
+            <button class="sub-tab ${
+                subTab === "passwords" ? "active" : ""
+            }" onclick="state.securitiesSubTab='passwords'; render()">Passwords</button>
+            <button class="sub-tab ${
+                subTab === "apis" ? "active" : ""
+            }" onclick="state.securitiesSubTab='apis'; render()">API Keys</button>
+            <button class="sub-tab ${
+                subTab === "cards" ? "active" : ""
+            }" onclick="state.securitiesSubTab='cards'; render()">Cards</button>
+        </div>
+    `;
+
+    let content = "";
+    if (subTab === "passwords") {
+        content = await renderPasswordList(renderCallback);
+    } else if (subTab === "apis") {
+        content = await renderApiList(renderCallback);
+    } else if (subTab === "cards") {
+        content = await renderCardList(renderCallback);
+    }
+
+    return `
+        ${renderSubTabs()}
+        ${content}
+    `;
+};
+
+// --- Passwords ---
+const renderPasswordList = async (renderCallback) => {
+    // ... (Existing password rendering logic, slightly adapted)
     const filtered = (items, fields) => {
         if (!state.search) return items;
         const q = state.search.toLowerCase();
@@ -123,12 +157,149 @@ export const renderPasswords = async (renderCallback) => {
                     passwords.length
                 } result${passwords.length !== 1 ? "s" : ""}</p>`
       }
-
       ${passwordCards}
     `;
 };
 
-export const setupPasswordActions = (render) => {
+// --- APIs ---
+const renderApiList = async (renderCallback) => {
+    const apis = state.apis || [];
+    let apiCards = "";
+
+    for (const api of apis) {
+        const decryptedKey = state.showPwd[api.id]
+            ? await decrypt(api.key)
+            : "••••••••••••••••";
+        const decryptedSecret =
+            api.secret && state.showPwd[api.id + "_secret"]
+                ? await decrypt(api.secret)
+                : "••••••••••••••••";
+
+        apiCards += `
+        <div class="card">
+            <div class="password-header">
+                <h3>${api.name}</h3>
+                <button class="btn-icon danger" onclick="window.deleteApi('${
+                    api.id
+                }')">🗑️</button>
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <div class="password-field">
+                    <span class="password-value">${decryptedKey}</span>
+                    <button class="btn-icon" onclick="state.showPwd['${
+                        api.id
+                    }']=!state.showPwd['${api.id}']; render()">
+                        ${state.showPwd[api.id] ? "👁️" : "👁️‍🗨️"}
+                    </button>
+                    <button class="btn-icon" onclick="window.copyApi('${
+                        api.id
+                    }', 'key')">📋</button>
+                </div>
+            </div>
+            ${
+                api.secret
+                    ? `
+            <div class="form-group">
+                <label>API Secret</label>
+                <div class="password-field">
+                    <span class="password-value">${decryptedSecret}</span>
+                    <button class="btn-icon" onclick="state.showPwd['${
+                        api.id
+                    }_secret']=!state.showPwd['${api.id}_secret']; render()">
+                        ${state.showPwd[api.id + "_secret"] ? "👁️" : "👁️‍🗨️"}
+                    </button>
+                    <button class="btn-icon" onclick="window.copyApi('${
+                        api.id
+                    }', 'secret')">📋</button>
+                </div>
+            </div>`
+                    : ""
+            }
+        </div>`;
+    }
+
+    return `
+        <div class="card form-card">
+            <h2>🔌 Add API Key</h2>
+            <div class="form-group">
+                <input id="apiName" placeholder="Service Name (e.g. OpenAI)">
+            </div>
+            <div class="form-group">
+                <input id="apiKey" type="password" placeholder="API Key">
+            </div>
+            <div class="form-group">
+                <input id="apiSecret" type="password" placeholder="API Secret (Optional)">
+            </div>
+            <button class="btn btn-primary" onclick="window.addApi()">💾 Save API</button>
+        </div>
+        ${apiCards}
+    `;
+};
+
+// --- Cards ---
+const renderCardList = async (renderCallback) => {
+    const cards = state.cards || [];
+    let cardCards = "";
+
+    for (const card of cards) {
+        const decryptedNum = state.showPwd[card.id]
+            ? await decrypt(card.number)
+            : `•••• •••• •••• ${card.last4}`;
+        const decryptedCvv = state.showPwd[card.id]
+            ? await decrypt(card.cvv)
+            : "•••";
+
+        cardCards += `
+        <div class="card" style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155;">
+            <div class="password-header">
+                <h3>${card.name}</h3>
+                <button class="btn-icon danger" onclick="window.deleteCard('${
+                    card.id
+                }')">🗑️</button>
+            </div>
+            <div style="font-family: monospace; font-size: 1.2rem; margin: 12px 0; letter-spacing: 2px;">
+                ${decryptedNum}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 0.8rem; color: #94a3b8;">EXP</div>
+                    <div>${card.exp}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.8rem; color: #94a3b8;">CVV</div>
+                    <div>${decryptedCvv}</div>
+                </div>
+                <button class="btn-icon" onclick="state.showPwd['${
+                    card.id
+                }']=!state.showPwd['${card.id}']; render()">
+                    ${state.showPwd[card.id] ? "👁️ Show Details" : "👁️‍🗨️ Hide"}
+                </button>
+            </div>
+        </div>`;
+    }
+
+    return `
+        <div class="card form-card">
+            <h2>💳 Add Card</h2>
+            <div class="form-group">
+                <input id="cardName" placeholder="Card Name (e.g. Chase Sapphire)">
+            </div>
+            <div class="form-group">
+                <input id="cardNumber" placeholder="Card Number" maxlength="19">
+            </div>
+            <div class="form-row cols-2">
+                <input id="cardExp" placeholder="MM/YY" maxlength="5">
+                <input id="cardCvv" placeholder="CVV" maxlength="4">
+            </div>
+            <button class="btn btn-primary" onclick="window.addCard()">💾 Save Card</button>
+        </div>
+        ${cardCards}
+    `;
+};
+
+export const setupSecurityActions = (render) => {
+    // --- Password Actions ---
     window.addPassword = async () => {
         const title = document.getElementById("pwdTitle").value;
         const pass = document.getElementById("pwdPass").value;
@@ -295,5 +466,72 @@ export const setupPasswordActions = (render) => {
         const pwdInput = document.getElementById("pwdPass");
         if (pwdInput) pwdInput.value = password;
         closeModal();
+    };
+
+    // --- API Actions ---
+    window.addApi = async () => {
+        const name = document.getElementById("apiName").value;
+        const key = document.getElementById("apiKey").value;
+        const secret = document.getElementById("apiSecret").value;
+
+        if (!name || !key) {
+            showToast("Name and API Key required!");
+            return;
+        }
+
+        state.apis.unshift({
+            id: uuid(),
+            name,
+            key: await encrypt(key),
+            secret: secret ? await encrypt(secret) : null,
+            updatedAt: new Date().toISOString(),
+        });
+        save(render);
+    };
+
+    window.deleteApi = (id) => {
+        showConfirm("Delete this API key?", () => {
+            state.apis = state.apis.filter((a) => a.id !== id);
+            save(render);
+        });
+    };
+
+    window.copyApi = async (id, field) => {
+        const api = state.apis.find((a) => a.id === id);
+        if (api && api[field]) {
+            const val = await decrypt(api[field]);
+            copyToClipboard(val);
+        }
+    };
+
+    // --- Card Actions ---
+    window.addCard = async () => {
+        const name = document.getElementById("cardName").value;
+        const number = document.getElementById("cardNumber").value;
+        const exp = document.getElementById("cardExp").value;
+        const cvv = document.getElementById("cardCvv").value;
+
+        if (!name || !number || !exp || !cvv) {
+            showToast("All card details required!");
+            return;
+        }
+
+        state.cards.unshift({
+            id: uuid(),
+            name,
+            number: await encrypt(number),
+            last4: number.slice(-4),
+            exp,
+            cvv: await encrypt(cvv),
+            updatedAt: new Date().toISOString(),
+        });
+        save(render);
+    };
+
+    window.deleteCard = (id) => {
+        showConfirm("Delete this card?", () => {
+            state.cards = state.cards.filter((c) => c.id !== id);
+            save(render);
+        });
     };
 };

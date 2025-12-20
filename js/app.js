@@ -1,9 +1,9 @@
 import { state, loadData, save } from "./state.js";
 import { renderTodos, setupTodoActions } from "./components/Todos.js";
 import {
-    renderPasswords,
-    setupPasswordActions,
-} from "./components/Passwords.js";
+    renderSecurities,
+    setupSecurityActions,
+} from "./components/Securities.js";
 import { renderVideos, setupVideoActions } from "./components/Videos.js";
 import { renderBooks, setupBookActions } from "./components/Books.js";
 import { renderNotes, setupNoteActions } from "./components/Notes.js";
@@ -15,10 +15,10 @@ const render = async () => {
     const tabs = [
         { id: "todos", icon: "📝", label: "Todos", desc: "Manage your tasks" },
         {
-            id: "passwords",
-            icon: "🔐",
-            label: "Passwords",
-            desc: "Secure vault",
+            id: "securities",
+            icon: "🛡️",
+            label: "Securities",
+            desc: "Vault & Keys",
         },
         { id: "videos", icon: "🎬", label: "Videos", desc: "Watch list" },
         { id: "books", icon: "📚", label: "Books", desc: "Reading list" },
@@ -58,17 +58,23 @@ const render = async () => {
             <span class="nav-icon">${
                 state.theme === "dark" ? "☀️" : "🌙"
             }</span>
-            <span class="nav-label">${
-                state.theme === "dark" ? "Light Mode" : "Dark Mode"
-            }</span>
+            <div class="nav-text">
+                <span class="nav-label">${
+                    state.theme === "dark" ? "Light Mode" : "Dark Mode"
+                }</span>
+            </div>
           </button>
           <button class="nav-item" onclick="window.checkForUpdates()">
             <span class="nav-icon">🔄</span>
-            <span class="nav-label">Check Updates</span>
+            <div class="nav-text">
+                <span class="nav-label">Check Updates</span>
+            </div>
           </button>
           <button class="nav-item" onclick="window.handleSync()">
             <span class="nav-icon">☁️</span>
-            <span class="nav-label">Sync Data</span>
+            <div class="nav-text">
+                <span class="nav-label">Sync Data</span>
+            </div>
           </button>
         </div>
       </aside>
@@ -101,8 +107,8 @@ const render = async () => {
         case "todos":
             contentHtml = renderTodos(render);
             break;
-        case "passwords":
-            contentHtml = await renderPasswords(render);
+        case "securities":
+            contentHtml = await renderSecurities(render);
             break;
         case "videos":
             contentHtml = renderVideos(render);
@@ -185,7 +191,7 @@ window.debounceSearch = (value) => {
 // Setup Keyboard Shortcuts
 document.onkeydown = (e) => {
     if (e.ctrlKey || e.metaKey) {
-        const tabs = ["todos", "passwords", "videos", "books", "notes"];
+        const tabs = ["todos", "securities", "videos", "books", "notes"];
         if (e.key >= "1" && e.key <= "5") {
             e.preventDefault();
             window.changeTab(tabs[parseInt(e.key) - 1]);
@@ -197,7 +203,7 @@ document.onkeydown = (e) => {
 const init = async () => {
     // Setup component actions
     setupTodoActions(render);
-    setupPasswordActions(render);
+    setupSecurityActions(render);
     setupVideoActions(render);
     setupBookActions(render);
     setupNoteActions(render);
