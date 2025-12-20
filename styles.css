@@ -714,8 +714,8 @@ textarea {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1100,12 +1100,14 @@ textarea {
 .note-content {
     flex: 1;
     color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.5;
+    font-size: 0.85rem;
+    line-height: 1.4;
     white-space: pre-wrap;
     margin-bottom: 16px;
-    overflow-y: auto;
-    max-height: 300px;
+    overflow-y: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 20;
+    -webkit-box-orient: vertical;
 }
 
 .note-footer {

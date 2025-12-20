@@ -18,25 +18,38 @@ export const renderNotes = (renderCallback) => {
 
     const notes = filtered(state.notes, ["title", "content"]);
 
-    const toolbar = `
-        <div class="editor-toolbar">
-            <button class="btn-icon" onclick="document.execCommand('bold', false, null)" title="Bold"><b>B</b></button>
-            <button class="btn-icon" onclick="document.execCommand('italic', false, null)" title="Italic"><i>I</i></button>
-            <button class="btn-icon" onclick="document.execCommand('underline', false, null)" title="Underline"><u>U</u></button>
-            <div class="toolbar-separator"></div>
-            <button class="btn-icon" onclick="document.execCommand('insertUnorderedList', false, null)" title="Bullet List">•</button>
-            <button class="btn-icon" onclick="document.execCommand('insertOrderedList', false, null)" title="Numbered List">1.</button>
-            <div class="toolbar-separator"></div>
-            <button class="btn-icon" onclick="document.execCommand('justifyLeft', false, null)" title="Align Left">⇤</button>
-            <button class="btn-icon" onclick="document.execCommand('justifyCenter', false, null)" title="Align Center">↔</button>
-            <button class="btn-icon" onclick="document.execCommand('justifyRight', false, null)" title="Align Right">⇥</button>
-            <div class="toolbar-separator"></div>
-            <button class="btn-icon" onclick="document.execCommand('hiliteColor', false, '#fef08a')" title="Highlight" style="background: #fef08a; color: black;">H</button>
-        </div>
-    `;
-
     return `
       <style>
+        .fab {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-size: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, background 0.2s;
+            z-index: 100;
+        }
+        .fab:hover {
+            transform: scale(1.1);
+            background: var(--accent-hover);
+        }
+        .note-card {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .note-card:hover {
+            transform: translateY(-2px);
+        }
         .editor-toolbar {
             display: flex;
             gap: 4px;
@@ -77,27 +90,13 @@ export const renderNotes = (renderCallback) => {
         }
       </style>
 
-      <div class="card form-card">
-        <h2>📒 Add Note</h2>
-        <div class="form-group">
-          <input id="noteTitle" placeholder="Title">
-        </div>
-        <div class="form-group">
-            ${toolbar}
-            <div id="noteContent" class="rich-editor" contenteditable="true" placeholder="Content..."></div>
-        </div>
-        <div class="form-group">
-          <input id="noteCategory" placeholder="Category (optional)">
-        </div>
-        <button class="btn btn-primary" onclick="window.addNote()">💾 Save Note</button>
-      </div>
-
       <div class="notes-canvas" id="notesCanvas">
         ${notes
             .map(
                 (n) => `
           <div class="note-card ${n.pinned ? "pinned" : ""}"
-               style="background-color: ${n.color}30;">
+               style="background-color: ${n.color}30;"
+               onclick="window.viewNote('${n.id}')">
             <div class="note-header">
               <h3>${n.title || "Untitled"}</h3>
               <div style="display: flex; gap: 4px;">
@@ -106,9 +105,6 @@ export const renderNotes = (renderCallback) => {
                 }')" title="Pin" style="color: ${
                     n.pinned ? "#648ca3ff" : "#64748b"
                 };">📌</button>
-                <button class="btn-icon" onclick="event.stopPropagation(); window.editNote('${
-                    n.id
-                }')" title="Edit">✏️</button>
                 <button class="btn-icon danger" onclick="event.stopPropagation(); window.confirmDeleteNote('${
                     n.id
                 }')" title="Delete">🗑️</button>
@@ -130,14 +126,59 @@ export const renderNotes = (renderCallback) => {
             )
             .join("")}
       </div>
+
+      <button class="fab" onclick="window.openAddNoteModal()">+</button>
     `;
 };
 
 export const setupNoteActions = (render) => {
+    const toolbar = `
+        <div class="editor-toolbar" style="background: var(--bg-primary);">
+            <button class="btn-icon" onclick="document.execCommand('bold', false, null)" title="Bold"><b>B</b></button>
+            <button class="btn-icon" onclick="document.execCommand('italic', false, null)" title="Italic"><i>I</i></button>
+            <button class="btn-icon" onclick="document.execCommand('underline', false, null)" title="Underline"><u>U</u></button>
+            <div class="toolbar-separator"></div>
+            <button class="btn-icon" onclick="document.execCommand('insertUnorderedList', false, null)" title="Bullet List">•</button>
+            <button class="btn-icon" onclick="document.execCommand('insertOrderedList', false, null)" title="Numbered List">1.</button>
+            <div class="toolbar-separator"></div>
+            <button class="btn-icon" onclick="document.execCommand('justifyLeft', false, null)" title="Align Left">⇤</button>
+            <button class="btn-icon" onclick="document.execCommand('justifyCenter', false, null)" title="Align Center">↔</button>
+            <button class="btn-icon" onclick="document.execCommand('justifyRight', false, null)" title="Align Right">⇥</button>
+            <div class="toolbar-separator"></div>
+            <button class="btn-icon" onclick="document.execCommand('hiliteColor', false, '#fef08a')" title="Highlight" style="background: #fef08a; color: black;">H</button>
+        </div>
+    `;
+
+    window.openAddNoteModal = () => {
+        const modals = document.getElementById("modals");
+        modals.innerHTML = `
+            <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                <div class="modal full-screen-modal" style="max-width: 95%; width: 95%; height: 95%; display: flex; flex-direction: column;">
+                    <div class="modal-header">
+                        <h2>📒 Add Note</h2>
+                        <button class="btn-icon" onclick="closeModal()">✕</button>
+                    </div>
+                    <div class="form-group">
+                        <input id="newNoteTitle" placeholder="Title" style="font-size: 1.8rem; font-weight: bold; padding: 16px;">
+                    </div>
+                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
+                        ${toolbar}
+                        <div id="newNoteContent" class="rich-editor" contenteditable="true" placeholder="Content..."
+                             style="flex: 1; resize: none; font-size: 1.2rem; padding: 16px; line-height: 1.6; border-radius: 0 0 var(--radius-md) var(--radius-md); border-top: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <input id="newNoteCategory" placeholder="Category (optional)" style="padding: 12px;">
+                    </div>
+                    <button class="btn btn-primary" style="padding: 12px;" onclick="window.addNote()">💾 Save Note</button>
+                </div>
+            </div>
+        `;
+    };
+
     window.addNote = () => {
-        const title = document.getElementById("noteTitle").value;
-        const content = document.getElementById("noteContent").innerHTML;
-        const category = document.getElementById("noteCategory").value;
+        const title = document.getElementById("newNoteTitle").value;
+        const content = document.getElementById("newNoteContent").innerHTML;
+        const category = document.getElementById("newNoteCategory").value;
 
         if (!title && (!content || content === "<br>")) {
             showToast("Please add a title or content!");
@@ -155,6 +196,34 @@ export const setupNoteActions = (render) => {
             date: new Date().toISOString(),
         });
         save(render);
+        closeModal();
+    };
+
+    window.viewNote = (id) => {
+        const n = state.notes.find((n) => n.id === id);
+        if (!n) return;
+
+        const modals = document.getElementById("modals");
+        modals.innerHTML = `
+            <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                <div class="modal full-screen-modal" style="max-width: 800px; width: 95%; height: 90%; display: flex; flex-direction: column;">
+                    <div class="modal-header">
+                        <h2>${n.title || "Untitled"}</h2>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-icon" onclick="window.editNote('${id}')" title="Edit">✏️</button>
+                            <button class="btn-icon" onclick="closeModal()">✕</button>
+                        </div>
+                    </div>
+                    <div style="flex: 1; overflow-y: auto; padding: 24px; font-size: 1.2rem; line-height: 1.6;">
+                        ${n.content}
+                    </div>
+                    <div style="padding: 16px; border-top: 1px solid var(--border); color: var(--text-muted); display: flex; justify-content: space-between;">
+                        <span>${n.category || "No Category"}</span>
+                        <span>${formatDate(n.date || n.updatedAt)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
     };
 
     window.togglePin = (id) => {
@@ -175,23 +244,6 @@ export const setupNoteActions = (render) => {
     window.editNote = (id) => {
         const n = state.notes.find((n) => n.id === id);
         if (!n) return;
-
-        const toolbar = `
-            <div class="editor-toolbar" style="background: var(--bg-primary);">
-                <button class="btn-icon" onclick="document.execCommand('bold', false, null)" title="Bold"><b>B</b></button>
-                <button class="btn-icon" onclick="document.execCommand('italic', false, null)" title="Italic"><i>I</i></button>
-                <button class="btn-icon" onclick="document.execCommand('underline', false, null)" title="Underline"><u>U</u></button>
-                <div class="toolbar-separator"></div>
-                <button class="btn-icon" onclick="document.execCommand('insertUnorderedList', false, null)" title="Bullet List">•</button>
-                <button class="btn-icon" onclick="document.execCommand('insertOrderedList', false, null)" title="Numbered List">1.</button>
-                <div class="toolbar-separator"></div>
-                <button class="btn-icon" onclick="document.execCommand('justifyLeft', false, null)" title="Align Left">⇤</button>
-                <button class="btn-icon" onclick="document.execCommand('justifyCenter', false, null)" title="Align Center">↔</button>
-                <button class="btn-icon" onclick="document.execCommand('justifyRight', false, null)" title="Align Right">⇥</button>
-                <div class="toolbar-separator"></div>
-                <button class="btn-icon" onclick="document.execCommand('hiliteColor', false, '#fef08a')" title="Highlight" style="background: #fef08a; color: black;">H</button>
-            </div>
-        `;
 
         const modals = document.getElementById("modals");
         modals.innerHTML = `
