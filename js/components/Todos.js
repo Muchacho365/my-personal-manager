@@ -6,6 +6,7 @@ import {
     showConfirm,
     showToast,
 } from "../utils.js";
+import { renderCalendar, setupCalendarActions } from "./Calendar.js";
 
 export const renderTodos = (renderCallback) => {
     const subTab = state.todoSubTab || "tasks";
@@ -16,21 +17,16 @@ export const renderTodos = (renderCallback) => {
                 subTab === "tasks" ? "active" : ""
             }" onclick="state.todoSubTab='tasks'; render()">Board</button>
             <button class="sub-tab ${
-                subTab === "schedule" ? "active" : ""
-            }" onclick="state.todoSubTab='schedule'; render()">Schedule</button>
-            <button class="sub-tab ${
-                subTab === "reminders" ? "active" : ""
-            }" onclick="state.todoSubTab='reminders'; render()">Reminders</button>
+                subTab === "calendar" ? "active" : ""
+            }" onclick="state.todoSubTab='calendar'; render()">Calendar</button>
         </div>
     `;
 
     let content = "";
     if (subTab === "tasks") {
         content = renderKanbanBoard(renderCallback);
-    } else if (subTab === "schedule") {
-        content = renderSchedule(renderCallback);
-    } else if (subTab === "reminders") {
-        content = renderReminders(renderCallback);
+    } else if (subTab === "calendar") {
+        content = renderCalendar(renderCallback);
     }
 
     return `
@@ -84,6 +80,11 @@ const renderKanbanBoard = (renderCallback) => {
     `;
 
     return `
+        <div class="kanban-board-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" onclick="window.aiPrioritizeTodos()">✨ AI Prioritize</button>
+            </div>
+        </div>
         <div class="kanban-board">
             ${renderColumn("To Do", todoItems, "todo", "header-todo")}
             ${renderColumn(
@@ -136,6 +137,11 @@ const renderKanbanCard = (t) => `
         </div>
         <div class="kanban-meta">
             ${
+                t.aiScore > 20
+                    ? `<span class="todo-badge" style="background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent);">🔥 High Focus</span>`
+                    : ""
+            }
+            ${
                 t.priority
                     ? `<span class="todo-badge priority-${t.priority}">${t.priority}</span>`
                     : ""
@@ -157,106 +163,6 @@ const renderKanbanCard = (t) => `
 `;
 
 // --- Schedule & Reminders (Keep existing) ---
-const renderSchedule = (renderCallback) => {
-    const days = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-    ];
-    const schedule = state.schedule || [];
-
-    return `
-        <div class="card form-card">
-            <h2>📅 Add to Schedule</h2>
-            <div class="form-row cols-2">
-                <input id="schedTitle" placeholder="Class / Activity">
-                <select id="schedDay" style="padding: 12px; background: #1e293b; border: 1px solid #334155; color: white; border-radius: 8px;">
-                    ${days
-                        .map((d) => `<option value="${d}">${d}</option>`)
-                        .join("")}
-                </select>
-            </div>
-            <div class="form-row cols-2">
-                <input id="schedTime" type="time" style="color-scheme: dark;">
-                <button class="btn btn-primary" onclick="window.addSchedule()">➕ Add</button>
-            </div>
-        </div>
-
-        <div class="schedule-grid">
-            ${days
-                .map((day) => {
-                    const dayItems = schedule
-                        .filter((s) => s.day === day)
-                        .sort((a, b) => a.time.localeCompare(b.time));
-                    return `
-                    <div class="card schedule-day">
-                        <h3>${day}</h3>
-                        ${
-                            dayItems.length
-                                ? dayItems
-                                      .map(
-                                          (item) => `
-                            <div class="schedule-item">
-                                <span class="time">${item.time}</span>
-                                <span class="title">${item.title}</span>
-                                <button class="btn-icon danger small" onclick="window.deleteSchedule('${item.id}')">×</button>
-                            </div>
-                        `
-                                      )
-                                      .join("")
-                                : `<div style="color: #64748b; font-size: 0.9rem;">No items</div>`
-                        }
-                    </div>
-                `;
-                })
-                .join("")}
-        </div>
-    `;
-};
-
-const renderReminders = (renderCallback) => {
-    const reminders = state.reminders || [];
-
-    return `
-        <div class="card form-card">
-            <h2>⏰ Add Reminder</h2>
-            <div class="form-row cols-2">
-                <input id="remText" placeholder="Remind me to...">
-                <input id="remTime" type="datetime-local" style="color-scheme: dark;">
-            </div>
-            <button class="btn btn-primary" onclick="window.addReminder()">➕ Set Reminder</button>
-        </div>
-
-        <div class="reminders-list">
-            ${reminders
-                .map(
-                    (r) => `
-                <div class="card reminder-item">
-                    <div class="reminder-content">
-                        <div class="reminder-text">${r.text}</div>
-                        <div class="reminder-time">📅 ${new Date(
-                            r.time
-                        ).toLocaleString()}</div>
-                    </div>
-                    <button class="btn-icon danger" onclick="window.deleteReminder('${
-                        r.id
-                    }')">🗑️</button>
-                </div>
-            `
-                )
-                .join("")}
-            ${
-                !reminders.length
-                    ? `<p style="text-align: center; color: #64748b;">No active reminders</p>`
-                    : ""
-            }
-        </div>
-    `;
-};
 
 export const setupTodoActions = (render) => {
     // --- Kanban Actions ---
@@ -333,37 +239,6 @@ export const setupTodoActions = (render) => {
         draggedId = null;
     };
 
-    // --- Schedule & Reminders Actions (Keep existing) ---
-    window.addSchedule = () => {
-        const title = document.getElementById("schedTitle").value;
-        const day = document.getElementById("schedDay").value;
-        const time = document.getElementById("schedTime").value;
-        if (!title || !time) {
-            showToast("Title and time required!");
-            return;
-        }
-        state.schedule.push({ id: uuid(), title, day, time });
-        save(render);
-    };
-
-    window.deleteSchedule = (id) => {
-        state.schedule = state.schedule.filter((s) => s.id !== id);
-        save(render);
-    };
-
-    window.addReminder = () => {
-        const text = document.getElementById("remText").value;
-        const time = document.getElementById("remTime").value;
-        if (!text || !time) {
-            showToast("Text and time required!");
-            return;
-        }
-        state.reminders.push({ id: uuid(), text, time });
-        save(render);
-    };
-
-    window.deleteReminder = (id) => {
-        state.reminders = state.reminders.filter((r) => r.id !== id);
-        save(render);
-    };
+    // --- Calendar Actions ---
+    setupCalendarActions(render);
 };

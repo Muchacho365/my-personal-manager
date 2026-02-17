@@ -1,4 +1,4 @@
-import { state, loadData, save } from "./state.js";
+import { state, loadData, save, initSync, getDataSnapshot } from "./state.js";
 import { renderTodos, setupTodoActions } from "./components/Todos.js";
 import {
     renderSecurities,
@@ -7,6 +7,12 @@ import {
 import { renderVideos, setupVideoActions } from "./components/Videos.js";
 import { renderBooks, setupBookActions } from "./components/Books.js";
 import { renderNotes, setupNoteActions } from "./components/Notes.js";
+import { renderAiTools, setupAiActions } from "./components/AiTools.js";
+import {
+    renderLayoutSelector,
+    getLayoutClasses,
+    setupLayoutActions,
+} from "./components/LayoutManager.js";
 import { showToast } from "./utils.js";
 
 const render = async () => {
@@ -23,6 +29,12 @@ const render = async () => {
         { id: "videos", icon: "🎬", label: "Videos", desc: "Watch list" },
         { id: "books", icon: "📚", label: "Books", desc: "Reading list" },
         { id: "notes", icon: "📒", label: "Notes", desc: "Thoughts & ideas" },
+        {
+            id: "ai-tools",
+            icon: "🤖",
+            label: "AI Tools",
+            desc: "Strategy Analysis",
+        },
     ];
 
     // Sidebar
@@ -76,6 +88,24 @@ const render = async () => {
                 <span class="nav-label">Sync Data</span>
             </div>
           </button>
+          <button class="nav-item" onclick="window.exportBackup()">
+            <span class="nav-icon">⬆️</span>
+            <div class="nav-text">
+                <span class="nav-label">Export Backup</span>
+            </div>
+          </button>
+          <button class="nav-item" onclick="window.importBackup()">
+            <span class="nav-icon">⬇️</span>
+            <div class="nav-text">
+                <span class="nav-label">Import Backup</span>
+            </div>
+          </button>
+          <button class="nav-item" onclick="window.electronAPI.openNewWindow()">
+            <span class="nav-icon">❐</span>
+            <div class="nav-text">
+                <span class="nav-label">New Window</span>
+            </div>
+          </button>
         </div>
       </aside>
     `;
@@ -98,6 +128,7 @@ const render = async () => {
         <div class="save-indicator ${state.saveStatus}">
           ${state.saveStatus === "saving" ? "💾 Saving..." : "✓ Saved"}
         </div>
+        ${renderLayoutSelector(render)}
       </div>
     `;
 
@@ -119,13 +150,16 @@ const render = async () => {
         case "notes":
             contentHtml = renderNotes(render);
             break;
+        case "ai-tools":
+            contentHtml = renderAiTools(render);
+            break;
     }
 
     app.innerHTML = `
       ${sidebarHtml}
       <main class="main-content">
         ${toolbarHtml}
-        <div class="content">${contentHtml}</div>
+        <div class="content ${getLayoutClasses()}">${contentHtml}</div>
       </main>
     `;
 
@@ -179,6 +213,50 @@ window.handleSync = () => {
     }, 1500);
 };
 
+window.exportBackup = async () => {
+    if (!window.electronAPI) {
+        showToast("Export is available in the desktop app.");
+        return;
+    }
+
+    await save(render);
+    const result = await window.electronAPI.exportData(getDataSnapshot());
+    if (!result || result.canceled) return;
+
+    if (result.error) {
+        console.error(result.error);
+        showToast("Export failed.");
+        return;
+    }
+
+    showToast("Backup exported.");
+};
+
+window.importBackup = async () => {
+    if (!window.electronAPI) {
+        showToast("Import is available in the desktop app.");
+        return;
+    }
+
+    const confirmed = window.confirm(
+        "Importing a backup will replace your current data. Continue?"
+    );
+    if (!confirmed) return;
+
+    const result = await window.electronAPI.importData();
+    if (!result || result.canceled) return;
+
+    if (result.error) {
+        console.error(result.error);
+        showToast("Import failed.");
+        return;
+    }
+
+    await loadData(render);
+    window.electronAPI.broadcastStateChange(getDataSnapshot());
+    showToast("Backup imported.");
+};
+
 let searchTimeout = null;
 window.debounceSearch = (value) => {
     clearTimeout(searchTimeout);
@@ -207,9 +285,14 @@ const init = async () => {
     setupVideoActions(render);
     setupBookActions(render);
     setupNoteActions(render);
+    setupAiActions(render);
+    setupLayoutActions(render);
 
     // Load data
     await loadData(render);
+
+    // Initialize Sync
+    initSync(render);
 
     // Listen for tray events
     if (window.electronAPI) {

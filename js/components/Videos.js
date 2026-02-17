@@ -15,27 +15,20 @@ export const renderVideos = (renderCallback) => {
 
     return `
       ${
-          !isSearching
-              ? `
-      <div class="card form-card">
-        <h2>🎬 Add Video</h2>
-        <div class="form-group">
-          <input id="vidTitle" placeholder="Title *">
-        </div>
-        <div class="form-row cols-3">
-          <input id="vidSeason" placeholder="Season">
-          <input id="vidEpisode" placeholder="Episode">
-          <input id="vidTime" placeholder="Time (e.g., 1:23:45)">
-        </div>
-        <div class="form-group">
-          <textarea id="vidNotes" placeholder="Notes" rows="2"></textarea>
-        </div>
-        <button class="btn btn-primary" onclick="window.addVideo()">💾 Save</button>
-      </div>
-      `
-              : `<p class="search-results-info">🔍 Found ${
+          !isSearching && videos.length === 0
+              ? `<div class="empty-state">
+                   <span style="font-size: 3rem;">🎬</span>
+                   <p>No videos yet. Add your first video!</p>
+                 </div>`
+              : ""
+      }
+      
+      ${
+          isSearching
+              ? `<p class="search-results-info">🔍 Found ${
                     videos.length
                 } result${videos.length !== 1 ? "s" : ""}</p>`
+              : ""
       }
 
       ${videos
@@ -67,13 +60,45 @@ export const renderVideos = (renderCallback) => {
       `
           )
           .join("")}
+      
+      <button class="fab" onclick="window.openAddVideoModal()">+</button>
     `;
 };
 
 export const setupVideoActions = (render) => {
+    window.openAddVideoModal = () => {
+        const modals = document.getElementById("modals");
+        modals.innerHTML = `
+            <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                <div class="modal full-screen-modal" style="max-width: 600px; width: 90%;">
+                    <div class="modal-header">
+                        <h2>🎬 Add Video</h2>
+                        <button class="btn-icon" onclick="closeModal()">✕</button>
+                    </div>
+                    <div class="form-group">
+                        <input id="vidTitle" placeholder="Title *" style="font-size: 1.2rem; padding: 12px;">
+                    </div>
+                    <div class="form-row cols-3">
+                        <input id="vidSeason" placeholder="Season">
+                        <input id="vidEpisode" placeholder="Episode">
+                        <input id="vidTime" placeholder="Time (e.g., 1:23:45)">
+                    </div>
+                    <div class="form-group">
+                        <textarea id="vidNotes" placeholder="Notes" rows="4"></textarea>
+                    </div>
+                    <button class="btn btn-primary" style="width: 100%; padding: 12px;" onclick="window.addVideo()">💾 Save Video</button>
+                </div>
+            </div>
+        `;
+        setTimeout(() => document.getElementById("vidTitle").focus(), 100);
+    };
+
     window.addVideo = () => {
         const title = document.getElementById("vidTitle").value;
-        if (!title) return;
+        if (!title) {
+            showToast("Please enter a title!");
+            return;
+        }
         state.videos.unshift({
             id: uuid(),
             title,
@@ -84,6 +109,7 @@ export const setupVideoActions = (render) => {
             updatedAt: new Date().toISOString(),
         });
         save(render);
+        closeModal();
     };
 
     window.confirmDeleteVideo = (id) => {

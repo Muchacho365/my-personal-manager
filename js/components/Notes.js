@@ -6,6 +6,7 @@ import {
     closeModal,
     showToast,
 } from "../utils.js";
+import { renderMarkdown } from "../utils/markdown.js";
 
 export const renderNotes = (renderCallback) => {
     const filtered = (items, fields) => {
@@ -19,78 +20,6 @@ export const renderNotes = (renderCallback) => {
     const notes = filtered(state.notes, ["title", "content"]);
 
     return `
-      <style>
-        .fab {
-            position: fixed;
-            bottom: 32px;
-            right: 32px;
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            background: var(--accent);
-            color: white;
-            border: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            font-size: 32px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.2s, background 0.2s;
-            z-index: 100;
-        }
-        .fab:hover {
-            transform: scale(1.1);
-            background: var(--accent-hover);
-        }
-        .note-card {
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .note-card:hover {
-            transform: translateY(-2px);
-        }
-        .editor-toolbar {
-            display: flex;
-            gap: 4px;
-            padding: 8px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-bottom: none;
-            border-radius: var(--radius-md) var(--radius-md) 0 0;
-            flex-wrap: wrap;
-        }
-        .toolbar-separator {
-            width: 1px;
-            background: var(--border);
-            margin: 0 4px;
-        }
-        .rich-editor {
-            min-height: 120px;
-            max-height: 400px;
-            overflow-y: auto;
-            padding: 12px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 0 0 var(--radius-md) var(--radius-md);
-            color: var(--text-primary);
-            outline: none;
-        }
-        .rich-editor:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-soft);
-        }
-        .rich-editor ul, .rich-editor ol {
-            padding-left: 20px;
-        }
-        .rich-editor blockquote {
-            border-left: 3px solid var(--accent);
-            padding-left: 10px;
-            color: var(--text-muted);
-        }
-      </style>
-
-      <div class="notes-canvas" id="notesCanvas">
         ${notes
             .map(
                 (n) => `
@@ -100,6 +29,9 @@ export const renderNotes = (renderCallback) => {
             <div class="note-header">
               <h3>${n.title || "Untitled"}</h3>
               <div style="display: flex; gap: 4px;">
+                <button class="btn-icon" onclick="event.stopPropagation(); window.editNote('${
+                    n.id
+                }')" title="Edit">✏️</button>
                 <button class="btn-icon" onclick="event.stopPropagation(); window.togglePin('${
                     n.id
                 }')" title="Pin" style="color: ${
@@ -125,7 +57,6 @@ export const renderNotes = (renderCallback) => {
         `
             )
             .join("")}
-      </div>
 
       <button class="fab" onclick="window.openAddNoteModal()">+</button>
     `;
@@ -161,13 +92,19 @@ export const setupNoteActions = (render) => {
                     <div class="form-group">
                         <input id="newNoteTitle" placeholder="Title" style="font-size: 1.8rem; font-weight: bold; padding: 16px;">
                     </div>
-                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
                         ${toolbar}
                         <div id="newNoteContent" class="rich-editor" contenteditable="true" placeholder="Content..."
-                             style="flex: 1; resize: none; font-size: 1.2rem; padding: 16px; line-height: 1.6; border-radius: 0 0 var(--radius-md) var(--radius-md); border-top: none;"></div>
+                             style="flex: 1; resize: none; font-size: 1.2rem; padding: 16px; line-height: 1.6; border-radius: 0 0 var(--radius-md) var(--radius-md); border-top: none; overflow-y: auto;"></div>
                     </div>
                     <div class="form-group">
                         <input id="newNoteCategory" placeholder="Category (optional)" style="padding: 12px;">
+                    </div>
+                    <div style="padding: 8px; font-size: 0.9rem; color: var(--text-muted);">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="newNoteIsMarkdown">
+                            Render as Markdown
+                        </label>
                     </div>
                     <button class="btn btn-primary" style="padding: 12px;" onclick="window.addNote()">💾 Save Note</button>
                 </div>
@@ -179,6 +116,7 @@ export const setupNoteActions = (render) => {
         const title = document.getElementById("newNoteTitle").value;
         const content = document.getElementById("newNoteContent").innerHTML;
         const category = document.getElementById("newNoteCategory").value;
+        const isMarkdown = document.getElementById("newNoteIsMarkdown").checked;
 
         if (!title && (!content || content === "<br>")) {
             showToast("Please add a title or content!");
@@ -192,6 +130,7 @@ export const setupNoteActions = (render) => {
             category,
             color: state.noteColor,
             pinned: false,
+            isMarkdown,
             updatedAt: new Date().toISOString(),
             date: new Date().toISOString(),
         });
@@ -203,6 +142,35 @@ export const setupNoteActions = (render) => {
         const n = state.notes.find((n) => n.id === id);
         if (!n) return;
 
+        const stripHtml = (html) => {
+            const tmp = document.createElement("DIV");
+            // Replace block tags with newlines to preserve structure
+            let clean = html
+                .replace(/<br\s*\/?>/gi, "\n")
+                .replace(/<\/div>/gi, "\n")
+                .replace(/<\/p>/gi, "\n\n");
+            tmp.innerHTML = clean;
+            let text = tmp.textContent || tmp.innerText || "";
+            // Replace non-breaking spaces with normal spaces and trim
+            return text.replace(/\u00A0/g, " ").trim();
+        };
+
+        const isMarkdown = n.isMarkdown || false;
+        const content = isMarkdown
+            ? renderMarkdown(stripHtml(n.content))
+            : n.content;
+
+        const aiSummaryHtml = n.aiSummary
+            ? `
+            <div class="ai-summary-box" style="margin-bottom: 20px; padding: 16px; background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: var(--radius-sm);">
+                <div style="font-size: 0.8rem; font-weight: bold; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <span>🤖 AI SUMMARY</span>
+                </div>
+                <div style="font-size: 1rem; line-height: 1.5; color: var(--text-primary);">${n.aiSummary}</div>
+            </div>
+        `
+            : "";
+
         const modals = document.getElementById("modals");
         modals.innerHTML = `
             <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
@@ -210,20 +178,41 @@ export const setupNoteActions = (render) => {
                     <div class="modal-header">
                         <h2>${n.title || "Untitled"}</h2>
                         <div style="display: flex; gap: 8px;">
+                            <button class="btn-icon" onclick="window.toggleMarkdown('${id}')" title="${
+            isMarkdown ? "Show Raw" : "Render Markdown"
+        }">
+                                ${isMarkdown ? "👁️" : "📝"}
+                            </button>
                             <button class="btn-icon" onclick="window.editNote('${id}')" title="Edit">✏️</button>
                             <button class="btn-icon" onclick="closeModal()">✕</button>
                         </div>
                     </div>
-                    <div style="flex: 1; overflow-y: auto; padding: 24px; font-size: 1.2rem; line-height: 1.6;">
-                        ${n.content}
+                    <div class="note-view-content ${
+                        isMarkdown ? "markdown-body" : ""
+                    }" style="flex: 1; overflow-y: auto; padding: 24px; font-size: 1.2rem; line-height: 1.6; min-height: 0;">
+                        ${aiSummaryHtml}
+                        ${content}
                     </div>
-                    <div style="padding: 16px; border-top: 1px solid var(--border); color: var(--text-muted); display: flex; justify-content: space-between;">
-                        <span>${n.category || "No Category"}</span>
-                        <span>${formatDate(n.date || n.updatedAt)}</span>
+                    <div style="padding: 16px; border-top: 1px solid var(--border); background: var(--bg-secondary); display: flex; gap: 12px; align-items: center;">
+                        <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 600;">AI ACTIONS:</span>
+                        <button class="btn btn-secondary btn-sm" onclick="window.aiSummarizeNote('${id}')">✨ Summarize</button>
+                        <button class="btn btn-secondary btn-sm" onclick="window.aiFindSimilar('${id}')">🔍 Find Similar</button>
+                        <div style="margin-left: auto; display: flex; gap: 16px; color: var(--text-muted); font-size: 0.85rem;">
+                            <span>${n.category || "No Category"}</span>
+                            <span>${formatDate(n.date || n.updatedAt)}</span>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
+    };
+
+    window.toggleMarkdown = (id) => {
+        const n = state.notes.find((n) => n.id === id);
+        if (n) {
+            n.isMarkdown = !n.isMarkdown;
+            save(() => window.viewNote(id));
+        }
     };
 
     window.togglePin = (id) => {
@@ -258,11 +247,19 @@ export const setupNoteActions = (render) => {
                             n.title || ""
                         }" placeholder="Title" style="font-size: 1.8rem; font-weight: bold; padding: 16px;">
                     </div>
-                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
                         ${toolbar}
                         <div id="editNoteContent" class="rich-editor" contenteditable="true" 
-                             style="flex: 1; resize: none; font-size: 1.2rem; padding: 16px; line-height: 1.6; border-radius: 0 0 var(--radius-md) var(--radius-md); border-top: none;">
+                             style="flex: 1; resize: none; font-size: 1.2rem; padding: 16px; line-height: 1.6; border-radius: 0 0 var(--radius-md) var(--radius-md); border-top: none; overflow-y: auto;">
                              ${n.content || ""}
+                        </div>
+                        <div style="padding: 8px; font-size: 0.9rem; color: var(--text-muted);">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="editNoteIsMarkdown" ${
+                                    n.isMarkdown ? "checked" : ""
+                                }>
+                                Render as Markdown
+                            </label>
                         </div>
                     </div>
                     <div class="form-group">
@@ -287,7 +284,11 @@ export const setupNoteActions = (render) => {
         n.title = document.getElementById("editNoteTitle").value;
         n.content = document.getElementById("editNoteContent").innerHTML;
         n.category = document.getElementById("editNoteCategory").value;
+        n.isMarkdown = document.getElementById("editNoteIsMarkdown").checked;
         n.updatedAt = new Date().toISOString();
+
+        // Clear AI summary if content changed significantly
+        delete n.aiSummary;
 
         // Move to top
         state.notes.splice(index, 1);
@@ -295,5 +296,22 @@ export const setupNoteActions = (render) => {
 
         save(render);
         closeModal();
+    };
+
+    window.aiSummarizeNote = async (id) => {
+        showToast("AI is summarizing...");
+        await aiManager.summarizeNote(id);
+        window.viewNote(id); // Refresh view
+    };
+
+    window.aiFindSimilar = async (id) => {
+        showToast("AI is searching for similar notes...");
+        const similarities = await aiManager.findSimilarNotes(id);
+        if (similarities.length === 0) {
+            showToast("No similar notes found.");
+        } else {
+            showToast(`Found ${similarities.length} similar notes!`);
+            console.log("Similarities:", similarities);
+        }
     };
 };

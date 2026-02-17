@@ -250,28 +250,13 @@ export const renderBooks = (renderCallback) => {
 
     // Library View - List of Books
     return `
-          <div class="card form-card">
-              <h2>📚 Add New Book</h2>
-              <div class="form-group">
-                  <input id="bookTitle" placeholder="Book Title *">
-              </div>
-              <div class="form-group">
-                  <input id="bookAuthor" placeholder="Author">
-              </div>
-              <div class="form-row cols-2">
-                  <input id="bookCurrentPage" type="number" placeholder="Current Page" min="0">
-                  <input id="bookTotalPages" type="number" placeholder="Total Pages" min="1">
-              </div>
-              <button class="btn btn-primary" onclick="window.addBook()">📚 Add to Library</button>
-          </div>
-
           <div class="books-library">
               ${
                   books.length === 0
                       ? `
                   <div class="empty-state">
                       <span style="font-size: 3rem;">📚</span>
-                      <p>No books yet. Add your first book above!</p>
+                      <p>No books yet. Add your first book!</p>
                   </div>
               `
                       : ""
@@ -333,13 +318,44 @@ export const renderBooks = (renderCallback) => {
                   })
                   .join("")}
           </div>
+          
+          <button class="fab" onclick="window.openAddBookModal()">+</button>
       `;
 };
 
 export const setupBookActions = (render) => {
+    window.openAddBookModal = () => {
+        const modals = document.getElementById("modals");
+        modals.innerHTML = `
+            <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+                <div class="modal" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h2>📚 Add Book</h2>
+                        <button class="btn-icon" onclick="closeModal()">✕</button>
+                    </div>
+                    <div class="form-group">
+                        <input id="bookTitle" placeholder="Book Title *" style="font-size: 1.1rem; padding: 12px;">
+                    </div>
+                    <div class="form-group">
+                        <input id="bookAuthor" placeholder="Author">
+                    </div>
+                    <div class="form-row cols-2">
+                        <input id="bookCurrentPage" type="number" placeholder="Current Page" min="0">
+                        <input id="bookTotalPages" type="number" placeholder="Total Pages" min="1">
+                    </div>
+                    <button class="btn btn-primary" style="width: 100%; padding: 12px;" onclick="window.addBook()">📚 Add to Library</button>
+                </div>
+            </div>
+        `;
+        setTimeout(() => document.getElementById("bookTitle").focus(), 100);
+    };
+
     window.addBook = () => {
         const title = document.getElementById("bookTitle").value;
-        if (!title) return;
+        if (!title) {
+            showToast("Please enter a book title!");
+            return;
+        }
         const authorEl = document.getElementById("bookAuthor");
         const currentPageEl = document.getElementById("bookCurrentPage");
         const totalPagesEl = document.getElementById("bookTotalPages");
@@ -353,6 +369,7 @@ export const setupBookActions = (render) => {
             updatedAt: new Date().toISOString(),
         });
         save(render);
+        closeModal();
     };
 
     window.updateBookProgress = (id) => {
